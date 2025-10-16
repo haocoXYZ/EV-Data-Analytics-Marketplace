@@ -9,6 +9,7 @@ export default function Checkout() {
   const [company, setCompany] = useState('')
   const [purpose, setPurpose] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [webhookStatus, setWebhookStatus] = useState<'idle' | 'processing' | 'verifying'>('idle')
 
   useEffect(() => {
     const pending = localStorage.getItem('pendingOrder')
@@ -19,28 +20,86 @@ export default function Checkout() {
     }
   }, [navigate])
 
+  // Simulate webhook callback from payment gateway
+  const simulatePaymentWebhook = async (orderId: string, amount: number) => {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        // Simulate successful payment webhook
+        const webhookPayload = {
+          event: 'payment.success',
+          orderId,
+          amount,
+          timestamp: new Date().toISOString(),
+          transactionId: 'TXN-' + Math.random().toString(36).substring(7),
+          status: 'completed',
+          method: 'credit_card'
+        }
+        
+        console.log('Webhook received:', webhookPayload)
+        resolve(webhookPayload)
+      }, 800)
+    })
+  }
+
+  // Simulate webhook verification
+  const verifyWebhookSignature = async (orderId: string) => {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        // Simulate signature verification
+        const isValid = Math.random() > 0.05 // 95% success rate for demo
+        console.log('Webhook signature verified:', isValid)
+        resolve(isValid)
+      }, 500)
+    })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsProcessing(true)
+    setWebhookStatus('processing')
 
-    // Mock payment processing
-    await new Promise(resolve => setTimeout(resolve, 1500))
+    try {
+      // Step 1: Process payment
+      await new Promise(resolve => setTimeout(resolve, 1200))
 
-    const order = {
-      ...orderData,
-      email,
-      company,
-      purpose,
-      orderId: 'ORD-' + Date.now(),
-      status: 'paid',
-      timestamp: new Date().toISOString()
+      const orderId = 'ORD-' + Date.now()
+
+      // Step 2: Simulate webhook callback from payment gateway
+      setWebhookStatus('verifying')
+      await simulatePaymentWebhook(orderId, orderData.price)
+      
+      // Step 3: Verify webhook signature
+      const isValid = await verifyWebhookSignature(orderId)
+      
+      if (!isValid) {
+        throw new Error('Webhook verification failed')
+      }
+
+      // Step 4: Create confirmed order
+      const order = {
+        ...orderData,
+        email,
+        company,
+        purpose,
+        orderId,
+        status: 'paid',
+        timestamp: new Date().toISOString(),
+        webhookVerified: true,
+        transactionId: 'TXN-' + Math.random().toString(36).substring(7)
+      }
+
+      localStorage.setItem('completedOrder', JSON.stringify(order))
+      localStorage.removeItem('pendingOrder')
+      
+      setIsProcessing(false)
+      setWebhookStatus('idle')
+      navigate('/success')
+    } catch (error) {
+      console.error('Payment error:', error)
+      setIsProcessing(false)
+      setWebhookStatus('idle')
+      alert('Payment processing failed. Please try again.')
     }
-
-    localStorage.setItem('completedOrder', JSON.stringify(order))
-    localStorage.removeItem('pendingOrder')
-    
-    setIsProcessing(false)
-    navigate('/success')
   }
 
   if (!orderData) {
@@ -116,6 +175,7 @@ export default function Checkout() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="your@email.com"
+                  disabled={isProcessing}
                 />
               </div>
 
@@ -130,6 +190,7 @@ export default function Checkout() {
                   onChange={(e) => setCompany(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Tên công ty"
+                  disabled={isProcessing}
                 />
               </div>
 
@@ -144,22 +205,49 @@ export default function Checkout() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Phân tích, nghiên cứu, phát triển sản phẩm..."
                   rows={3}
+                  disabled={isProcessing}
                 />
               </div>
 
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <span className="text-blue-600 text-xl">ℹ️</span>
+              {isProcessing && (
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <div className="text-sm text-blue-800">
-                    Đây là demo thanh toán giả lập. Không có giao dịch thực tế nào được thực hiện.
+                    <div className="font-semibold mb-2">Trạng thái xử lý:</div>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+                          <span className="text-white text-xs">✓</span>
+                        </div>
+                        <span>Xử lý thanh toán...</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                          webhookStatus === 'verifying' ? 'bg-blue-500' : 'bg-gray-300'
+                        }`}>
+                          {webhookStatus === 'verifying' && (
+                            <svg className="animate-spin h-3 w-3 text-white" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                          )}
+                        </div>
+                        <span>Xác minh webhook...</span>
+                      </div>
+                    </div>
                   </div>
+                </div>
+              )}
+
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <div className="text-sm text-blue-800">
+                  <span className="font-semibold">Demo Mode:</span> Thanh toán được giả lập. Hệ thống sẽ nhận webhook callback từ payment gateway (demo).
                 </div>
               </div>
 
               <button
                 type="submit"
                 disabled={isProcessing}
-                className="btn-primary w-full"
+                className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isProcessing ? (
                   <span className="flex items-center justify-center gap-2">
