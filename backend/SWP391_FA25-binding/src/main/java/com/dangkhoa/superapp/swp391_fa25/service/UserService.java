@@ -7,7 +7,6 @@ import java.util.List;
 
 public interface UserService {
     public User findByEmailAndPassword(String email, String password);
-   // public User findByEmail(String email);
+    // public User findByEmail(String email);
     List<User> findByStatus(String status);
     List<User> getAll();}
-

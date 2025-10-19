@@ -14,21 +14,21 @@ public class UserServiceImpl implements UserService {
     @Autowired
     private UserRepository repo;
 
-   /* public User login(String email, String password) {
-        if(email.isEmpty() || password.isEmpty()) {
-            return null;  // Hoặc bạn có thể ném một ngoại lệ để thông báo lỗi
-        }
+    /* public User login(String email, String password) {
+         if(email.isEmpty() || password.isEmpty()) {
+             return null;  // Hoặc bạn có thể ném một ngoại lệ để thông báo lỗi
+         }
 
-        // Tìm kiếm người dùng trong cơ sở dữ liệu theo email
-        User user = repo.findByEmail(email); // Giả sử repo có phương thức findByEmail
+         // Tìm kiếm người dùng trong cơ sở dữ liệu theo email
+         User user = repo.findByEmail(email); // Giả sử repo có phương thức findByEmail
 
-        if(user != null && password.equals(user.getPassword())) {
-            return user;  // Đăng nhập thành công, trả về thông tin người dùng
-        } else {
-            return null;  // Hoặc bạn có thể ném một ngoại lệ để báo lỗi
-        }
+         if(user != null && password.equals(user.getPassword())) {
+             return user;  // Đăng nhập thành công, trả về thông tin người dùng
+         } else {
+             return null;  // Hoặc bạn có thể ném một ngoại lệ để báo lỗi
+         }
 
-    }*/
+     }*/
     public User registerUser(User user) {
         if ("DataProvider".equalsIgnoreCase(user.getRole())) {
             user.setStatus("Pending");

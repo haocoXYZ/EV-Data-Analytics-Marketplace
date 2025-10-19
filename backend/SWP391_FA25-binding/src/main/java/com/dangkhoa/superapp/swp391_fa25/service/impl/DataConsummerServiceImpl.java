@@ -15,7 +15,7 @@ import java.util.List;
 @Service
 public class DataConsummerServiceImpl implements DataConsumerService {
     @Autowired
-private  DataConsumerRepository repo;
+    private  DataConsumerRepository repo;
 
     @Override
     public List<DataConsumer> findAll() {
