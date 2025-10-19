@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class DatasetServiceImpl implements DatasetService {
@@ -21,9 +22,19 @@ public class DatasetServiceImpl implements DatasetService {
 
     @Override
     public List<Dataset> getAllDatasets() {
-
-            return repo.findAll() ;
+        List<Dataset> datasets = repo.findAll();
+        // Lọc chỉ lấy name và datasetId
+        return datasets.stream()
+                .map(dataset -> new Dataset(dataset.getDataset_id(), dataset.getName()))  // Trả về chỉ id và name
+                .collect(Collectors.toList());
     }
+    //return repo.findAll() ;
+
+    @Override
+    public Dataset getDatasetById(int datasetId) {
+        return repo.findById(datasetId).orElse(null);  // Trả về dataset đầy đủ khi nhận được datasetId
+    }
+
 
 
 }

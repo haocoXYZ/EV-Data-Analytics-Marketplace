@@ -25,10 +25,7 @@ public class UserController {
     public User register(@RequestBody User user) {
         return service.registerUser(user);
     }
-    @GetMapping("/admin/account")
-    public List<User> getAllUsers() {
-        return service.getAllUsers();
-    }
+
 
 
 }

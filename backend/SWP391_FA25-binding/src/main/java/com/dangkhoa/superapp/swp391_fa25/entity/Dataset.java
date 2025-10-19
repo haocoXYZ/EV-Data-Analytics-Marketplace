@@ -44,4 +44,9 @@ public class Dataset {
         this.visibility = visibility;
     }
 
+
+    public Dataset(int datasetId, String name) {
+        this.dataset_id = datasetId;
+        this.name = name;
+    }
 }

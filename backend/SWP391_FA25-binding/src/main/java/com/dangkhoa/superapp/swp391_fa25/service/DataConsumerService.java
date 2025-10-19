@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface DataConsumerService {
 public List<DataConsumer> findAll();
+
 }
