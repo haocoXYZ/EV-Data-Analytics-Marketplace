@@ -58,7 +58,11 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
+<<<<<<< HEAD
             <version>1.18.22</version>
+=======
+            <version>1.18.42</version>
+>>>>>>> 1ebd13cbb96164f00dc43c0f7424e476f56247ab
         </dependency>
         <dependency>
             <groupId>org.springdoc</groupId>

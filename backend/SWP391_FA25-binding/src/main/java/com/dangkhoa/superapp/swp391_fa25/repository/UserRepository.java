@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 package com.dangkhoa.superapp.swp391_fa25.repository;
 
 import com.dangkhoa.superapp.swp391_fa25.entity.User;
@@ -11,3 +12,18 @@ public interface UserRepository extends JpaRepository<User,Integer> {
 
     User findUserByEmail(String email);
 }
+=======
+package com.dangkhoa.superapp.swp391_fa25.repository;
+
+import com.dangkhoa.superapp.swp391_fa25.entity.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+public interface UserRepository extends JpaRepository<User,Integer> {
+
+    User findUserByUserId(int userId);
+
+    User findUserByEmail(String email);
+}
+>>>>>>> 1ebd13cbb96164f00dc43c0f7424e476f56247ab
