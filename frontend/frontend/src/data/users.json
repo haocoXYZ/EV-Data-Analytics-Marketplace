@@ -1,0 +1,44 @@
+{
+  "users": [
+    {
+      "id": "usr_admin_001",
+      "email": "admin@evdata.vn",
+      "password": "admin123",
+      "name": "Nguyễn Admin",
+      "roleId": 1,
+      "roleName": "admin"
+    },
+    {
+      "id": "usr_provider_001",
+      "email": "provider@evdata.vn",
+      "password": "provider123",
+      "name": "Công ty VinFast",
+      "roleId": 2,
+      "roleName": "provider"
+    },
+    {
+      "id": "usr_provider_002",
+      "email": "techev@evdata.vn",
+      "password": "provider123",
+      "name": "TechEV Analytics",
+      "roleId": 2,
+      "roleName": "provider"
+    },
+    {
+      "id": "usr_consumer_001",
+      "email": "consumer@evdata.vn",
+      "password": "consumer123",
+      "name": "Trần Văn A",
+      "roleId": 3,
+      "roleName": "consumer"
+    },
+    {
+      "id": "usr_consumer_002",
+      "email": "buyer@company.vn",
+      "password": "buyer123",
+      "name": "Công ty ABC",
+      "roleId": 3,
+      "roleName": "consumer"
+    }
+  ]
+}

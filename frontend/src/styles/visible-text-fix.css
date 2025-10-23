@@ -1,0 +1,55 @@
+/* Buộc chữ luôn hiển thị trong Ant Design trên Chromium/Windows */
+
+/* Nút (primary, default, link) */
+.ant-btn,
+.ant-btn > span {
+  opacity: 1 !important;
+  visibility: visible !important;
+  color: inherit !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+/* Nền/viền nút primary tránh bị trong suốt bởi theme/override khác */
+.ant-btn-primary {
+  background-color: var(--ant-primary-color, #1677ff) !important;
+  border-color: var(--ant-primary-color, #1677ff) !important;
+  color: #fff !important;
+}
+
+/* Input & TextArea (giá trị và placeholder) */
+.ant-input,
+.ant-input-textarea textarea {
+  color: rgba(0, 0, 0, 0.88) !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+.ant-input::placeholder,
+.ant-input-textarea textarea::placeholder {
+  color: rgba(0, 0, 0, 0.25) !important;
+  opacity: 1 !important; /* tránh ẩn placeholder cho đến khi focus */
+}
+
+/* Select/Tag/Breadcrumb/Typo – các chỗ chữ dễ bị kế thừa rule “transparent” */
+.ant-select-selection-item,
+.ant-tag,
+.ant-typography,
+.ant-breadcrumb,
+.ant-badge {
+  -webkit-text-fill-color: currentColor !important;
+}
+
+/* Modal/Drawer – nơi bạn thấy lỗi khi confirm/suspend */
+.ant-modal,
+.ant-drawer {
+  -webkit-font-smoothing: antialiased;
+}
+.ant-modal .ant-btn > span,
+.ant-drawer .ant-btn > span {
+  -webkit-text-fill-color: currentColor !important;
+}
+
+/* Nếu từng thêm hack GPU như translateZ(0) làm mất chữ, vô hiệu hóa nó */
+.ant-table,
+.ant-modal,
+.ant-drawer {
+  transform: none !important;
+}
