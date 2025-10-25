@@ -18,3 +18,4 @@ export default function SmartLayout({ children }: SmartLayoutProps) {
   // Otherwise use consumer layout (including non-logged-in users)
   return <ConsumerLayout>{children}</ConsumerLayout>
 }
+
