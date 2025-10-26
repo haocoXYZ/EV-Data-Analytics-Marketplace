@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("EVDataMarketplace.API")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5ac5cb2eef55a155a0e3812fdc42d2dbc8fbf97b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5ed94466066ab7481d435fd7d41c9c8cf9445324")]
 [assembly: System.Reflection.AssemblyProductAttribute("EVDataMarketplace.API")]
 [assembly: System.Reflection.AssemblyTitleAttribute("EVDataMarketplace.API")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
