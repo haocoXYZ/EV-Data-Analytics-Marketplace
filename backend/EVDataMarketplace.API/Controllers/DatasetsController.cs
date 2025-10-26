@@ -150,6 +150,64 @@ public class DatasetsController : ControllerBase
         return Ok(datasets);
     }
 
+    // GET: api/datasets/my-purchases - Consumer xem datasets da mua
+    [Authorize(Roles = "DataConsumer")]
+    [HttpGet("my-purchases")]
+    public async Task<ActionResult<IEnumerable<object>>> GetMyPurchasedDatasets()
+    {
+        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+
+        var consumer = await _context.DataConsumers.FirstOrDefaultAsync(c => c.UserId == userId);
+        if (consumer == null)
+        {
+            return NotFound(new { message = "Consumer profile not found" });
+        }
+
+        var purchasedDatasets = await _context.OneTimePurchases
+            .Include(p => p.Dataset)
+                .ThenInclude(d => d!.DataProvider)
+                    .ThenInclude(dp => dp!.User)
+            .Include(p => p.Dataset)
+                .ThenInclude(d => d!.PricingTier)
+            .Where(p => p.ConsumerId == consumer.ConsumerId && p.Status == "Completed")
+            .Select(p => new
+            {
+                p.OtpId,
+                p.DatasetId,
+                Dataset = new DatasetDto
+                {
+                    DatasetId = p.Dataset!.DatasetId,
+                    ProviderId = p.Dataset.ProviderId,
+                    ProviderName = p.Dataset.DataProvider!.CompanyName,
+                    Name = p.Dataset.Name,
+                    Description = p.Dataset.Description,
+                    Category = p.Dataset.Category,
+                    DataFormat = p.Dataset.DataFormat,
+                    DataSizeMb = p.Dataset.DataSizeMb,
+                    UploadDate = p.Dataset.UploadDate,
+                    Status = p.Dataset.Status,
+                    ModerationStatus = p.Dataset.ModerationStatus,
+                    TierName = p.Dataset.PricingTier!.TierName,
+                    BasePricePerMb = p.Dataset.PricingTier.BasePricePerMb
+                },
+                Purchase = new
+                {
+                    p.OtpId,
+                    p.PurchaseDate,
+                    p.StartDate,
+                    p.EndDate,
+                    p.TotalPrice,
+                    p.LicenseType,
+                    p.DownloadCount,
+                    p.MaxDownload,
+                    p.Status
+                }
+            })
+            .ToListAsync();
+
+        return Ok(purchasedDatasets);
+    }
+
     // POST: api/datasets - Provider upload dataset with CSV file and save to database
     [Authorize(Roles = "DataProvider")]
     [HttpPost]
