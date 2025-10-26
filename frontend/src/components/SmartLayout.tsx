@@ -19,3 +19,5 @@ export default function SmartLayout({ children }: SmartLayoutProps) {
   return <ConsumerLayout>{children}</ConsumerLayout>
 }
 
+
+

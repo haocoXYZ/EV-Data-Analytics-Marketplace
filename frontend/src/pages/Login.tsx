@@ -1,42 +1,37 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import usersData from '../data/users.json'
 
 export default function Login() {
   const navigate = useNavigate()
-  const { login } = useAuth()
+  const { login, loading } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     
-    // Find user by email and password
-    const user = usersData.users.find(
-      u => u.email === email && u.password === password
-    )
-    
-    if (!user) {
-      setError('Email hoặc mật khẩu không đúng!')
-      return
-    }
-    
-    // Login with role from database
-    login(email, password, user.roleName as any)
-    
-    // Navigate based on roleId
-    if (user.roleId === 1) {
-      // Admin
-      navigate('/admin/dashboard')
-    } else if (user.roleId === 2) {
-      // Provider
-      navigate('/provider/dashboard')
-    } else if (user.roleId === 3) {
-      // Consumer
-      navigate('/')
+    try {
+      await login(email, password)
+      
+      // Get user from localStorage to determine role
+      const savedUser = localStorage.getItem('user')
+      if (savedUser) {
+        const user = JSON.parse(savedUser)
+        
+        // Navigate based on role
+        if (user.role === 'admin') {
+          navigate('/admin/dashboard')
+        } else if (user.role === 'provider') {
+          navigate('/provider/dashboard')
+        } else if (user.role === 'consumer') {
+          navigate('/')
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || 'Đăng nhập thất bại!')
     }
   }
 
@@ -96,17 +91,18 @@ export default function Login() {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
               <strong>💡 Tài khoản demo:</strong><br/>
               <div className="mt-2 space-y-1">
-                <div>Admin: admin@evdata.vn / admin123</div>
-                <div>Provider: provider@evdata.vn / provider123</div>
-                <div>Consumer: consumer@evdata.vn / consumer123</div>
+                <div>Admin: admin@test.com / Test123!</div>
+                <div>Provider: provider@test.com / Test123!</div>
+                <div>Consumer: consumer@test.com / Test123!</div>
               </div>
             </div>
 
             <button
               type="submit"
-              className="w-full py-3 rounded-lg font-semibold text-white shadow-lg hover:shadow-xl transition-all transform hover:scale-105 bg-gradient-to-r from-blue-600 to-indigo-600"
+              disabled={loading}
+              className="w-full py-3 rounded-lg font-semibold text-white shadow-lg hover:shadow-xl transition-all transform hover:scale-105 bg-gradient-to-r from-blue-600 to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Đăng nhập
+              {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
             </button>
           </form>
 
@@ -121,21 +117,21 @@ export default function Login() {
           <div className="flex justify-center gap-3 flex-wrap">
             <button
               type="button"
-              onClick={() => { setEmail('admin@evdata.vn'); setPassword('admin123'); }}
+              onClick={() => { setEmail('admin@test.com'); setPassword('Test123!'); }}
               className="px-4 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white rounded-lg text-sm transition-colors"
             >
               Admin
             </button>
             <button
               type="button"
-              onClick={() => { setEmail('provider@evdata.vn'); setPassword('provider123'); }}
+              onClick={() => { setEmail('provider@test.com'); setPassword('Test123!'); }}
               className="px-4 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white rounded-lg text-sm transition-colors"
             >
               Provider
             </button>
             <button
               type="button"
-              onClick={() => { setEmail('consumer@evdata.vn'); setPassword('consumer123'); }}
+              onClick={() => { setEmail('consumer@test.com'); setPassword('Test123!'); }}
               className="px-4 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white rounded-lg text-sm transition-colors"
             >
               Consumer
