@@ -10,6 +10,7 @@ public interface ICsvParserService
 {
     Task<List<Dictionary<string, object>>> ParseCsvAsync(Stream csvStream);
     Task<(int rowCount, List<string> columns)> GetCsvInfoAsync(Stream csvStream);
+    string ConvertRecordsToCsv(List<string> recordsJson);
 }
 
 public class CsvParserService : ICsvParserService
@@ -107,5 +108,71 @@ public class CsvParserService : ICsvParserService
             _logger.LogError(ex, "Error reading CSV info");
             throw new InvalidDataException("Failed to read CSV file info: " + ex.Message);
         }
+    }
+
+    public string ConvertRecordsToCsv(List<string> recordsJson)
+    {
+        try
+        {
+            if (recordsJson.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            // Deserialize first record to get headers
+            var firstRecord = JsonSerializer.Deserialize<Dictionary<string, object>>(recordsJson[0]);
+            if (firstRecord == null || firstRecord.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            var headers = firstRecord.Keys.ToList();
+            var csv = new StringBuilder();
+
+            // Write header
+            csv.AppendLine(string.Join(",", headers.Select(h => EscapeCsvValue(h))));
+
+            // Write data rows
+            foreach (var recordJson in recordsJson)
+            {
+                var record = JsonSerializer.Deserialize<Dictionary<string, object>>(recordJson);
+                if (record != null)
+                {
+                    var values = headers.Select(h =>
+                    {
+                        if (record.TryGetValue(h, out var value))
+                        {
+                            return EscapeCsvValue(value?.ToString() ?? string.Empty);
+                        }
+                        return string.Empty;
+                    });
+                    csv.AppendLine(string.Join(",", values));
+                }
+            }
+
+            _logger.LogInformation("Converted {Count} records to CSV", recordsJson.Count);
+            return csv.ToString();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error converting records to CSV");
+            throw new InvalidDataException("Failed to convert records to CSV: " + ex.Message);
+        }
+    }
+
+    private string EscapeCsvValue(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        // Escape values containing comma, quote, or newline
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
+        {
+            return $"\"{value.Replace("\"", "\"\"")}\"";
+        }
+
+        return value;
     }
 }

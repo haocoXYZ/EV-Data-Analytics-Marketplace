@@ -322,9 +322,9 @@ public class DatasetsController : ControllerBase
         }
 
         var dataset = await _context.Datasets.FindAsync(id);
-        if (dataset == null || string.IsNullOrEmpty(dataset.FilePath))
+        if (dataset == null)
         {
-            return NotFound(new { message = "Dataset file not found" });
+            return NotFound(new { message = "Dataset not found" });
         }
 
         // Check if consumer has purchased this dataset
@@ -339,12 +339,6 @@ public class DatasetsController : ControllerBase
             return Forbid("You need to purchase this dataset first or download limit exceeded");
         }
 
-        // Check if file exists
-        if (!_fileService.FileExists(dataset.FilePath))
-        {
-            return NotFound(new { message = "File not found on server" });
-        }
-
         // Increment download count
         var purchase = await _context.OneTimePurchases
             .FirstOrDefaultAsync(p => p.DatasetId == id
@@ -357,11 +351,83 @@ public class DatasetsController : ControllerBase
             await _context.SaveChangesAsync();
         }
 
-        // Download file
-        var stream = await _fileService.DownloadFileAsync(dataset.FilePath);
-        var fileName = Path.GetFileName(dataset.FilePath);
+        // Download from file if available
+        if (!string.IsNullOrEmpty(dataset.FilePath) && _fileService.FileExists(dataset.FilePath))
+        {
+            var stream = await _fileService.DownloadFileAsync(dataset.FilePath);
+            var fileName = Path.GetFileName(dataset.FilePath);
+            return File(stream, "application/octet-stream", fileName);
+        }
 
-        return File(stream, "application/octet-stream", fileName);
+        // Otherwise, generate CSV from database records
+        var records = await _context.DatasetRecords
+            .Where(r => r.DatasetId == id)
+            .OrderBy(r => r.RowNumber)
+            .Select(r => r.RecordData)
+            .ToListAsync();
+
+        if (records.Count == 0)
+        {
+            return NotFound(new { message = "No data found for this dataset" });
+        }
+
+        // Generate CSV from records
+        var csvContent = _csvParserService.ConvertRecordsToCsv(records);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(csvContent);
+        var memoryStream = new MemoryStream(bytes);
+
+        return File(memoryStream, "text/csv", $"{dataset.Name?.Replace(" ", "_")}_data.csv");
+    }
+
+    // GET: api/datasets/{id}/records - View dataset records (for purchased datasets)
+    [Authorize(Roles = "DataConsumer")]
+    [HttpGet("{id}/records")]
+    public async Task<ActionResult<object>> GetDatasetRecords(int id, [FromQuery] int page = 1, [FromQuery] int pageSize = 100)
+    {
+        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+
+        var consumer = await _context.DataConsumers.FirstOrDefaultAsync(c => c.UserId == userId);
+        if (consumer == null)
+        {
+            return NotFound(new { message = "Consumer profile not found" });
+        }
+
+        // Check if consumer has purchased this dataset
+        var hasPurchase = await _context.OneTimePurchases
+            .AnyAsync(p => p.DatasetId == id
+                && p.ConsumerId == consumer.ConsumerId
+                && p.Status == "Completed");
+
+        if (!hasPurchase)
+        {
+            return Forbid("You need to purchase this dataset first");
+        }
+
+        var totalRecords = await _context.DatasetRecords.CountAsync(r => r.DatasetId == id);
+        
+        var records = await _context.DatasetRecords
+            .Where(r => r.DatasetId == id)
+            .OrderBy(r => r.RowNumber)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(r => new
+            {
+                r.RecordId,
+                r.RowNumber,
+                r.RecordData,
+                r.CreatedAt
+            })
+            .ToListAsync();
+
+        return Ok(new
+        {
+            datasetId = id,
+            page,
+            pageSize,
+            totalRecords,
+            totalPages = (int)Math.Ceiling(totalRecords / (double)pageSize),
+            records
+        });
     }
 
     // PUT: api/datasets/5 - Provider update own dataset (chi khi chua approved)
