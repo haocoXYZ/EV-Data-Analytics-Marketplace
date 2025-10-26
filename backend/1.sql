@@ -1,4 +1,8 @@
-Database
+-- =============================================
+-- EV DATA ANALYTICS MARKETPLACE DATABASE SCHEMA
+-- Version: 1.0
+-- Description: Database cho nen tang cho du lieu phan tich xe dien
+-- =============================================
 
 -- ===================== ROLE =====================
 CREATE TABLE [User] (
@@ -6,9 +10,9 @@ CREATE TABLE [User] (
     full_name VARCHAR(150) NOT NULL,
     email VARCHAR(150) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
-    role VARCHAR(50) NOT NULL,
+    role VARCHAR(50) NOT NULL, -- Admin, Moderator, DataProvider, DataConsumer
     created_at DATETIME DEFAULT GETDATE(),
-    status VARCHAR(50) DEFAULT 'Active'
+    status VARCHAR(50) DEFAULT 'Active' -- Active, Inactive, Suspended
 );
 
 CREATE TABLE DataProvider (
@@ -94,77 +98,124 @@ CREATE TABLE Ward (
     FOREIGN KEY (province_id) REFERENCES Province(province_id)
 );
 
+-- =============== PRICING TIER ===============
+-- B1: Admin cung cap bang gia cho cac muc thong tin khac nhau
+CREATE TABLE PricingTier (
+    tier_id INT IDENTITY(1,1) PRIMARY KEY,
+    tier_name VARCHAR(100) NOT NULL, -- Basic, Standard, Premium
+    description NVARCHAR(MAX),
+    base_price_per_mb DECIMAL(18,2), -- Gia co ban theo MB
+    api_price_per_call DECIMAL(18,2), -- Gia moi lan goi API
+    subscription_price_per_region DECIMAL(18,2), -- Gia thue bao theo khu vuc
+    provider_commission_percent DECIMAL(5,2), -- % chia cho provider (VD: 70%)
+    admin_commission_percent DECIMAL(5,2), -- % giu lai cho admin (VD: 30%)
+    is_active BIT DEFAULT 1,
+    created_at DATETIME DEFAULT GETDATE(),
+    updated_at DATETIME DEFAULT GETDATE()
+);
+
 -- =================== DATASET ===================
 CREATE TABLE Dataset (
     dataset_id INT IDENTITY(1,1) PRIMARY KEY,
     provider_id INT,
     port_id INT,
+    tier_id INT, -- Lien ket voi bang gia
     name VARCHAR(255),
     description NVARCHAR(MAX),
     category VARCHAR(150),
-    price DECIMAL(18,2),
-    access_type VARCHAR(50),
     data_format VARCHAR(50),
     data_size_mb DECIMAL(18,2),
     upload_date DATETIME,
     last_updated DATETIME,
-    status VARCHAR(50),
-    visibility VARCHAR(50),
+    status VARCHAR(50), -- Pending, Approved, Rejected, Active, Inactive
+    visibility VARCHAR(50), -- Public, Private
+    moderation_status VARCHAR(50) DEFAULT 'Pending', -- Pending, UnderReview, Approved, Rejected
+    file_path NVARCHAR(500), -- Duong dan luu file CSV
     FOREIGN KEY (provider_id) REFERENCES DataProvider(provider_id),
-    FOREIGN KEY (port_id) REFERENCES Port(port_id)
+    FOREIGN KEY (port_id) REFERENCES Port(port_id),
+    FOREIGN KEY (tier_id) REFERENCES PricingTier(tier_id)
+);
+
+-- ============ DATASET MODERATION ============
+-- B3: Moderator kiem duyet va dang tai thong tin
+CREATE TABLE DatasetModeration (
+    moderation_id INT IDENTITY(1,1) PRIMARY KEY,
+    dataset_id INT,
+    moderator_user_id INT, -- User co role Moderator/Admin
+    review_date DATETIME DEFAULT GETDATE(),
+    moderation_status VARCHAR(50), -- Approved, Rejected, NeedRevision
+    comments NVARCHAR(MAX),
+    FOREIGN KEY (dataset_id) REFERENCES Dataset(dataset_id),
+    FOREIGN KEY (moderator_user_id) REFERENCES [User](user_id)
 );
 
 -- ====== ONETIMEPURCHASE, SUBSCRIPTION, API ======
+-- B5: Data Consumer chon va mua data theo goi
+
+-- Goi data: Mua 1 lan vao khoang thoi gian cu the, tai ve qua file (CSV)
 CREATE TABLE OneTimePurchase (
     otp_id INT IDENTITY(1,1) PRIMARY KEY,
     dataset_id INT,
     consumer_id INT,
-    purchase_date DATETIME,
+    purchase_date DATETIME DEFAULT GETDATE(),
+    start_date DATETIME, -- Thoi gian bat dau cua data
+    end_date DATETIME, -- Thoi gian ket thuc cua data
     total_price DECIMAL(18,2),
-    license_type VARCHAR(50),
-    status VARCHAR(50),
+    license_type VARCHAR(50), -- Research, Commercial
+    download_count INT DEFAULT 0, -- So lan da tai
+    max_download INT DEFAULT 3, -- Gioi han so lan tai
+    status VARCHAR(50), -- Pending, Completed, Expired
     FOREIGN KEY (dataset_id) REFERENCES Dataset(dataset_id),
     FOREIGN KEY (consumer_id) REFERENCES DataConsumer(consumer_id)
 );
 
+-- Goi thue bao: So lan request khong gioi han cho mot khu vuc nhat dinh
 CREATE TABLE Subscription (
     sub_id INT IDENTITY(1,1) PRIMARY KEY,
     dataset_id INT,
     consumer_id INT,
+    province_id INT, -- Khu vuc duoc phep truy cap (tinh/thanh)
     sub_start DATETIME,
     sub_end DATETIME,
-    renewal_status VARCHAR(50),
-    renewal_cycle VARCHAR(50),
+    renewal_status VARCHAR(50), -- Active, Cancelled, Expired
+    renewal_cycle VARCHAR(50), -- Monthly, Quarterly, Yearly
     total_price DECIMAL(18,2),
+    request_count INT DEFAULT 0, -- Dem so lan request (khong gioi han nhung de thong ke)
     FOREIGN KEY (dataset_id) REFERENCES Dataset(dataset_id),
-    FOREIGN KEY (consumer_id) REFERENCES DataConsumer(consumer_id)
+    FOREIGN KEY (consumer_id) REFERENCES DataConsumer(consumer_id),
+    FOREIGN KEY (province_id) REFERENCES Province(province_id)
 );
 
-CREATE TABLE API (
+-- Goi API: So lan tra phi = so luot request API
+CREATE TABLE APIPackage (
     api_id INT IDENTITY(1,1) PRIMARY KEY,
     dataset_id INT,
     consumer_id INT,
-    api_key VARCHAR(255),
-    api_calls_limit INT,
+    api_key VARCHAR(255) UNIQUE, -- API key de xac thuc
+    api_calls_purchased INT, -- So luot goi da mua
+    api_calls_used INT DEFAULT 0, -- So luot da su dung
     price_per_call DECIMAL(18,2),
-    billing_period_start DATETIME,
-    billing_period_end DATETIME,
-    total_billed_amount DECIMAL(18,2),
-    status VARCHAR(50),
+    purchase_date DATETIME DEFAULT GETDATE(),
+    expiry_date DATETIME, -- Ngay het han (neu co)
+    total_paid DECIMAL(18,2),
+    status VARCHAR(50), -- Active, Exhausted, Expired
     FOREIGN KEY (dataset_id) REFERENCES Dataset(dataset_id),
     FOREIGN KEY (consumer_id) REFERENCES DataConsumer(consumer_id)
 );
 
 -- =================== PAYMENT ===================
+-- B6: Data Consumer thanh toan va su dung (PayOS integration)
 CREATE TABLE Payment (
     payment_id INT IDENTITY(1,1) PRIMARY KEY,
     consumer_id INT,
     amount DECIMAL(18,2),
-    payment_date DATETIME,
-    payment_method VARCHAR(100),
-    payment_type VARCHAR(100),
-    status VARCHAR(50),
-    transaction_ref VARCHAR(100),
+    payment_date DATETIME DEFAULT GETDATE(),
+    payment_method VARCHAR(100), -- PayOS, BankTransfer, etc.
+    payment_type VARCHAR(100), -- OneTimePurchase, Subscription, APIPackage
+    reference_id INT, -- ID cua otp_id, sub_id, hoac api_id
+    status VARCHAR(50), -- Pending, Completed, Failed, Refunded
+    transaction_ref VARCHAR(100), -- Ma giao dich tu PayOS
+    payos_order_id VARCHAR(100), -- Order ID tu PayOS
     notes NVARCHAR(MAX),
     FOREIGN KEY (consumer_id) REFERENCES DataConsumer(consumer_id)
 );
@@ -176,9 +227,10 @@ CREATE TABLE OneTimePurchaseHistory (
     payment_id INT,
     dataset_id INT,
     consumer_id INT,
-    access_date DATETIME,
+    access_date DATETIME DEFAULT GETDATE(),
     data_volume_mb DECIMAL(18,2),
-    access_type VARCHAR(50),
+    download_url NVARCHAR(500), -- URL tai file CSV
+    access_type VARCHAR(50), -- Download
     FOREIGN KEY (otp_id) REFERENCES OneTimePurchase(otp_id),
     FOREIGN KEY (payment_id) REFERENCES Payment(payment_id),
     FOREIGN KEY (dataset_id) REFERENCES Dataset(dataset_id),
@@ -191,13 +243,15 @@ CREATE TABLE SubscriptionHistory (
     payment_id INT,
     dataset_id INT,
     consumer_id INT,
-    usage_date DATETIME,
+    usage_date DATETIME DEFAULT GETDATE(),
+    province_id INT, -- Khu vuc duoc truy cap
     data_volume_mb DECIMAL(18,2),
-    delivery_status VARCHAR(50),
+    delivery_status VARCHAR(50), -- Success, Failed
     FOREIGN KEY (subscription_id) REFERENCES Subscription(sub_id),
     FOREIGN KEY (payment_id) REFERENCES Payment(payment_id),
     FOREIGN KEY (dataset_id) REFERENCES Dataset(dataset_id),
-    FOREIGN KEY (consumer_id) REFERENCES DataConsumer(consumer_id)
+    FOREIGN KEY (consumer_id) REFERENCES DataConsumer(consumer_id),
+    FOREIGN KEY (province_id) REFERENCES Province(province_id)
 );
 
 CREATE TABLE APIHistory (
@@ -206,41 +260,46 @@ CREATE TABLE APIHistory (
     payment_id INT,
     dataset_id INT,
     consumer_id INT,
-    call_time DATETIME,
+    call_time DATETIME DEFAULT GETDATE(),
     endpoint VARCHAR(255),
-    data_volume_mb DECIMAL(18,2),
-    status VARCHAR(50),
-    FOREIGN KEY (api_id) REFERENCES API(api_id),
+    request_params NVARCHAR(MAX), -- Tham so request (JSON)
+    response_size_mb DECIMAL(18,2),
+    status VARCHAR(50), -- Success, Failed, RateLimited
+    FOREIGN KEY (api_id) REFERENCES APIPackage(api_id),
     FOREIGN KEY (payment_id) REFERENCES Payment(payment_id),
     FOREIGN KEY (dataset_id) REFERENCES Dataset(dataset_id),
     FOREIGN KEY (consumer_id) REFERENCES DataConsumer(consumer_id)
 );
 
 -- ================ REVENUESHARE ================
+-- B7: Admin quan ly thanh toan va tra tien cho Data Provider moi thang
 CREATE TABLE RevenueShare (
     share_id INT IDENTITY(1,1) PRIMARY KEY,
     payment_id INT,
     provider_id INT,
     dataset_id INT,
-    total_amount DECIMAL(18,2),
-    provider_share DECIMAL(18,2),
-    admin_share DECIMAL(18,2),
+    total_amount DECIMAL(18,2), -- Tong tien tu giao dich
+    provider_share DECIMAL(18,2), -- Phan provider nhan (VD: 70%)
+    admin_share DECIMAL(18,2), -- Phan admin giu lai (VD: 30%)
     calculated_date DATETIME DEFAULT GETDATE(),
-    status VARCHAR(50) DEFAULT 'Pending',
+    payout_status VARCHAR(50) DEFAULT 'Pending', -- Pending, Paid
     FOREIGN KEY (payment_id) REFERENCES Payment(payment_id),
     FOREIGN KEY (provider_id) REFERENCES DataProvider(provider_id),
     FOREIGN KEY (dataset_id) REFERENCES Dataset(dataset_id)
 );
 
 -- =================== PAYOUT ===================
+-- B7: Tra tien cho Provider hang thang
 CREATE TABLE Payout (
     payout_id INT IDENTITY(1,1) PRIMARY KEY,
     provider_id INT,
-    month_year VARCHAR(7),
-    total_due DECIMAL(18,2),
+    month_year VARCHAR(7), -- Format: 2025-01, 2025-02
+    total_due DECIMAL(18,2), -- Tong tien can tra
     payout_date DATETIME,
-    payout_status VARCHAR(50) DEFAULT 'Pending',
-    payment_method VARCHAR(100),
+    payout_status VARCHAR(50) DEFAULT 'Pending', -- Pending, Processing, Completed, Failed
+    payment_method VARCHAR(100), -- BankTransfer, PayOS, etc.
+    bank_account VARCHAR(100), -- So tai khoan ngan hang
+    transaction_ref VARCHAR(100), -- Ma giao dich
     notes NVARCHAR(MAX),
     FOREIGN KEY (provider_id) REFERENCES DataProvider(provider_id)
 );
