@@ -1,6 +1,8 @@
 import React from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import DashboardLayout from './DashboardLayout'
+import AdminLayout from './AdminLayout'
+import ModeratorLayout from './ModeratorLayout'
+import ProviderLayout from './ProviderLayout'
 import ConsumerLayout from './ConsumerLayout'
 
 interface SmartLayoutProps {
@@ -10,12 +12,22 @@ interface SmartLayoutProps {
 export default function SmartLayout({ children }: SmartLayoutProps) {
   const { user } = useAuth()
 
-  // If user is admin or provider, use dashboard layout
-  if (user?.role === 'admin' || user?.role === 'provider') {
-    return <DashboardLayout>{children}</DashboardLayout>
+  // Admin layout - Full access
+  if (user?.role === 'Admin') {
+    return <AdminLayout>{children}</AdminLayout>
   }
 
-  // Otherwise use consumer layout (including non-logged-in users)
+  // Moderator layout - Only moderation access
+  if (user?.role === 'Moderator') {
+    return <ModeratorLayout>{children}</ModeratorLayout>
+  }
+
+  // Provider layout - Provider access
+  if (user?.role === 'DataProvider') {
+    return <ProviderLayout>{children}</ProviderLayout>
+  }
+
+  // Consumer layout (including non-logged-in users)
   return <ConsumerLayout>{children}</ConsumerLayout>
 }
 

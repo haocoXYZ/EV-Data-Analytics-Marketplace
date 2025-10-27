@@ -1,94 +1,123 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
-import api from '../utils/api'
-
-type Role = 'admin' | 'provider' | 'consumer' | null
-
-interface User {
-  id: number
-  email: string
-  role: Role
-  name: string
-  token: string
-  expiresAt: string
-}
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { authApi } from '../api'
+import { User, LoginRequest, RegisterRequest } from '../types'
 
 interface AuthContextType {
   user: User | null
-  login: (email: string, password: string) => Promise<void>
-  logout: () => void
   loading: boolean
-  error: string | null
+  login: (email: string, password: string) => Promise<void>
+  register: (data: RegisterRequest) => Promise<void>
+  logout: () => void
+  isAuthenticated: boolean
+  isAdmin: boolean
+  isProvider: boolean
+  isConsumer: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Map backend roles to frontend roles
-const mapRole = (backendRole: string): Role => {
-  const role = backendRole.toLowerCase()
-  if (role === 'admin' || role === 'moderator') return 'admin'
-  if (role === 'dataprovider') return 'provider'
-  if (role === 'dataconsumer') return 'consumer'
-  return null
+interface AuthProviderProps {
+  children: ReactNode
 }
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
+  // Load user from localStorage on mount
   useEffect(() => {
-    const savedUser = localStorage.getItem('user')
-    if (savedUser) {
+    const storedUser = localStorage.getItem('user')
+    if (storedUser) {
       try {
-        const userData = JSON.parse(savedUser)
+        const userData = JSON.parse(storedUser)
         // Check if token is expired
-        if (new Date(userData.expiresAt) > new Date()) {
+        const expiresAt = new Date(userData.expiresAt)
+        if (expiresAt > new Date()) {
           setUser(userData)
         } else {
+          // Token expired, clear storage
           localStorage.removeItem('user')
         }
-      } catch (e) {
+      } catch (error) {
+        console.error('Failed to parse user data:', error)
         localStorage.removeItem('user')
       }
     }
+    setLoading(false)
   }, [])
 
   const login = async (email: string, password: string) => {
-    setLoading(true)
-    setError(null)
-    
     try {
-      const response = await api.auth.login(email, password)
+      const response = await authApi.login({ email, password })
       
-      const newUser: User = {
-        id: response.userId,
+      const userData: User = {
+        userId: response.userId,
+        fullName: response.fullName,
         email: response.email,
-        role: mapRole(response.role),
-        name: response.fullName,
+        role: response.role,
         token: response.token,
-        expiresAt: response.expiresAt
+        expiresAt: response.expiresAt,
       }
+
+      setUser(userData)
+      localStorage.setItem('user', JSON.stringify(userData))
+
+      // Navigation will be handled by Login component
+    } catch (error: any) {
+      console.error('Login error:', error)
+      throw error
+    }
+  }
+
+  const register = async (data: RegisterRequest) => {
+    try {
+      const response = await authApi.register(data)
       
-      setUser(newUser)
-      localStorage.setItem('user', JSON.stringify(newUser))
-    } catch (err: any) {
-      setError(err.message || 'Login failed')
-      throw err
-    } finally {
-      setLoading(false)
+      const userData: User = {
+        userId: response.userId,
+        fullName: response.fullName,
+        email: response.email,
+        role: response.role,
+        token: response.token,
+        expiresAt: response.expiresAt,
+      }
+
+      setUser(userData)
+      localStorage.setItem('user', JSON.stringify(userData))
+
+      // Navigation will be handled by Register component
+    } catch (error: any) {
+      console.error('Register error:', error)
+      throw error
     }
   }
 
   const logout = () => {
     setUser(null)
     localStorage.removeItem('user')
+    // Navigation to /login will be handled by component calling logout
   }
 
-  return (
-    <AuthContext.Provider value={{ user, login, logout, loading, error }}>
-      {children}
-    </AuthContext.Provider>
-  )
+  // Helper computed values
+  const isAuthenticated = !!user
+  const isAdmin = user?.role === 'Admin' || user?.role === 'Moderator'
+  const isProvider = user?.role === 'DataProvider'
+  const isConsumer = user?.role === 'DataConsumer'
+
+  const value: AuthContextType = {
+    user,
+    loading,
+    login,
+    register,
+    logout,
+    isAuthenticated,
+    isAdmin,
+    isProvider,
+    isConsumer,
+  }
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {
