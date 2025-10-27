@@ -66,10 +66,46 @@ export const datasetsApi = {
 
   /**
    * GET /api/datasets/my-purchases
-   * Get datasets purchased by current consumer (Consumer only)
+   * Get all purchase types (OneTime, Subscription, APIPackage) for current consumer
    */
-  getMyPurchases: async (): Promise<Dataset[]> => {
-    const response = await client.get<Dataset[]>('/datasets/my-purchases')
+  getMyPurchases: async (): Promise<any> => {
+    const response = await client.get('/datasets/my-purchases')
+    return response.data
+  },
+
+  /**
+   * GET /api/datasets/my-subscriptions
+   * Get active subscriptions (Consumer only)
+   */
+  getMySubscriptions: async (): Promise<any[]> => {
+    const response = await client.get('/datasets/my-subscriptions')
+    return response.data
+  },
+
+  /**
+   * GET /api/datasets/my-api-packages
+   * Get active API packages (Consumer only)
+   */
+  getMyAPIPackages: async (): Promise<any[]> => {
+    const response = await client.get('/datasets/my-api-packages')
+    return response.data
+  },
+
+  /**
+   * GET /api/datasets/{id}/api-key
+   * Get API key for a dataset (Consumer only, for subscriptions or API packages)
+   */
+  getApiKey: async (datasetId: number): Promise<any> => {
+    const response = await client.get(`/datasets/${datasetId}/api-key`)
+    return response.data
+  },
+
+  /**
+   * POST /api/datasets/{id}/api/call
+   * Make API call to get dataset data (Consumer only, for subscriptions or API packages)
+   */
+  callApi: async (datasetId: number): Promise<any> => {
+    const response = await client.post(`/datasets/${datasetId}/api/call`)
     return response.data
   },
 }

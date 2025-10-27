@@ -18,11 +18,18 @@ export default function MyPurchases() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [purchasedDatasets, paymentHistory] = await Promise.all([
+      const [purchaseData, paymentHistory] = await Promise.all([
         datasetsApi.getMyPurchases(),
         paymentsApi.getMy()
       ])
-      setPurchases(purchasedDatasets)
+      // Backend returns: { oneTimePurchases: [...], subscriptions: [...], apiPackages: [...] }
+      // Extract all purchases into a flat array
+      const allPurchases = [
+        ...(purchaseData.oneTimePurchases || []),
+        ...(purchaseData.subscriptions || []),
+        ...(purchaseData.apiPackages || [])
+      ]
+      setPurchases(allPurchases)
       setPayments(paymentHistory)
     } catch (error) {
       console.error('Failed to load data:', error)
@@ -123,92 +130,121 @@ export default function MyPurchases() {
                   </div>
                 ) : purchases.length > 0 ? (
                   <div className="space-y-4">
-                    {purchases.map((item) => (
-                      <div key={item.otpId} className="bg-gray-50 rounded-xl p-6 border border-gray-200 hover:border-blue-300 transition-colors">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <h3 className="text-xl font-bold text-gray-900">{item.dataset?.name}</h3>
-                              <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
-                                {item.dataset?.category}
+                    {purchases.map((item) => {
+                      const datasetName = item.dataset?.name || item.Dataset?.name || 'Unknown'
+                      const datasetId = item.datasetId || item.Dataset?.datasetId
+                      const purchaseType = item.PurchaseType || 'OneTime'
+                      const purchaseId = item.otpId || item.subId || item.apiId
+                      
+                      return (
+                        <div key={purchaseId} className="bg-gray-50 rounded-xl p-6 border border-gray-200 hover:border-blue-300 transition-colors">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                <h3 className="text-xl font-bold text-gray-900">{datasetName}</h3>
+                                <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+                                  {item.dataset?.category || item.Dataset?.category}
+                                </span>
+                                <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
+                                  purchaseType === 'OneTime' ? 'bg-green-100 text-green-700' :
+                                  purchaseType === 'Subscription' ? 'bg-purple-100 text-purple-700' :
+                                  'bg-orange-100 text-orange-700'
+                                }`}>
+                                  {purchaseType === 'OneTime' ? '📥 One-Time' : 
+                                   purchaseType === 'Subscription' ? '🔄 Subscription' : '🔌 API Package'}
+                                </span>
+                              </div>
+                              <p className="text-gray-600 text-sm line-clamp-2 mb-3">
+                                {item.dataset?.description || item.Dataset?.description}
+                              </p>
+                              
+                              <div className="flex flex-wrap gap-4 text-sm">
+                                <div className="flex items-center gap-1 text-gray-500">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  Mua: {new Date(
+                                    item.purchase?.purchaseDate || 
+                                    item.purchaseDetails?.purchaseDate ||
+                                    Date.now()
+                                  ).toLocaleDateString('vi-VN')}
+                                </div>
+                                <div className="flex items-center gap-1 text-gray-500">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                  </svg>
+                                  {(item.dataset?.dataSizeMb || item.Dataset?.dataSizeMb)?.toFixed(2)} MB
+                                </div>
+                                {purchaseType === 'OneTime' && (
+                                  <div className="flex items-center gap-1 text-gray-500">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Downloads: {item.purchaseDetails?.downloadCount || 0}/{item.purchaseDetails?.maxDownload || 5}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {purchaseType === 'OneTime' && (
+                              <div className="flex flex-col gap-2 ml-4">
+                                <button
+                                  onClick={() => handleDownload(datasetId, datasetName)}
+                                  disabled={downloading === datasetId || item.purchaseDetails?.downloadCount >= item.purchaseDetails?.maxDownload}
+                                  className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-2 rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                                >
+                                  {downloading === datasetId ? (
+                                    <span className="flex items-center gap-2">
+                                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                      </svg>
+                                      Downloading...
+                                    </span>
+                                  ) : (
+                                    <span className="flex items-center gap-2">
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                      </svg>
+                                      Download CSV
+                                    </span>
+                                  )}
+                                </button>
+
+                                <Link
+                                  to={`/dataset/${datasetId}`}
+                                  className="bg-gray-100 text-gray-700 px-6 py-2 rounded-lg font-semibold hover:bg-gray-200 transition-colors text-center whitespace-nowrap"
+                                >
+                                  Chi tiết
+                                </Link>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Purchase Details */}
+                          <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-3 gap-4 text-sm">
+                            <div>
+                              <div className="text-gray-600 mb-1">Giá đã trả</div>
+                              <div className="font-bold text-gray-900">
+                                {(item.purchaseDetails?.totalPrice || item.totalPrice)?.toLocaleString('vi-VN')} đ
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-gray-600 mb-1">Loại</div>
+                              <div className="font-medium text-gray-900">
+                                {item.purchaseDetails?.licenseType || purchaseType}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-gray-600 mb-1">Trạng thái</div>
+                              <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getPaymentStatusColor(item.status || item.purchaseDetails?.status)}`}>
+                                {item.status || item.purchaseDetails?.status}
                               </span>
                             </div>
-                            <p className="text-gray-600 text-sm line-clamp-2 mb-3">{item.dataset?.description}</p>
-                            
-                            <div className="flex flex-wrap gap-4 text-sm">
-                              <div className="flex items-center gap-1 text-gray-500">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                Mua: {new Date(item.purchase?.purchaseDate).toLocaleDateString('vi-VN')}
-                              </div>
-                              <div className="flex items-center gap-1 text-gray-500">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                                </svg>
-                                {item.dataset?.dataSizeMb?.toFixed(2)} MB
-                              </div>
-                              <div className="flex items-center gap-1 text-gray-500">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                </svg>
-                                Downloads: {item.purchase?.downloadCount || 0}/{item.purchase?.maxDownload || 5}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col gap-2 ml-4">
-                            <button
-                              onClick={() => handleDownload(item.datasetId, item.dataset?.name)}
-                              disabled={downloading === item.datasetId || item.purchase?.downloadCount >= item.purchase?.maxDownload}
-                              className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-2 rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                            >
-                              {downloading === item.datasetId ? (
-                                <span className="flex items-center gap-2">
-                                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                  </svg>
-                                  Downloading...
-                                </span>
-                              ) : (
-                                <span className="flex items-center gap-2">
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                  </svg>
-                                  Download CSV
-                                </span>
-                              )}
-                            </button>
-
-                            <Link
-                              to={`/dataset/${item.datasetId}`}
-                              className="bg-gray-100 text-gray-700 px-6 py-2 rounded-lg font-semibold hover:bg-gray-200 transition-colors text-center whitespace-nowrap"
-                            >
-                              Chi tiết
-                            </Link>
                           </div>
                         </div>
-
-                        {/* Purchase Details */}
-                        <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-3 gap-4 text-sm">
-                          <div>
-                            <div className="text-gray-600 mb-1">Giá đã trả</div>
-                            <div className="font-bold text-gray-900">{item.purchase?.totalPrice?.toLocaleString('vi-VN')} đ</div>
-                          </div>
-                          <div>
-                            <div className="text-gray-600 mb-1">License</div>
-                            <div className="font-medium text-gray-900">{item.purchase?.licenseType || 'N/A'}</div>
-                          </div>
-                          <div>
-                            <div className="text-gray-600 mb-1">Trạng thái</div>
-                            <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getPaymentStatusColor(item.purchase?.status)}`}>
-                              {item.purchase?.status}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-12">

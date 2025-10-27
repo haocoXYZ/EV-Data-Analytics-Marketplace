@@ -11,6 +11,10 @@ export default function ModeratorReview() {
   const [action, setAction] = useState<'approve' | 'reject'>('approve')
   const [comments, setComments] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [previewModal, setPreviewModal] = useState(false)
+  const [previewData, setPreviewData] = useState<any>(null)
+  const [loadingPreview, setLoadingPreview] = useState(false)
+  const [downloading, setDownloading] = useState<number | null>(null)
 
   useEffect(() => {
     loadPendingDatasets()
@@ -58,6 +62,39 @@ export default function ModeratorReview() {
       alert('Lỗi: ' + error.message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handlePreview = async (datasetId: number) => {
+    setLoadingPreview(true)
+    try {
+      const data = await moderationApi.preview(datasetId, 10)
+      setPreviewData(data)
+      setPreviewModal(true)
+    } catch (error: any) {
+      alert('Lỗi preview: ' + error.message)
+    } finally {
+      setLoadingPreview(false)
+    }
+  }
+
+  const handleDownloadForReview = async (datasetId: number, datasetName: string) => {
+    setDownloading(datasetId)
+    try {
+      const blob = await moderationApi.downloadForReview(datasetId)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${datasetName.replace(/\s+/g, '_')}_review.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+      alert('Download thành công!')
+    } catch (error: any) {
+      alert('Lỗi download: ' + error.message)
+    } finally {
+      setDownloading(null)
     }
   }
 
@@ -138,25 +175,62 @@ export default function ModeratorReview() {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex gap-3 pt-4 border-t border-gray-100">
-                    <button
-                      onClick={() => handleReview(dataset, 'approve')}
-                      className="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all inline-flex items-center justify-center"
-                    >
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Phê duyệt
-                    </button>
-                    <button
-                      onClick={() => handleReview(dataset, 'reject')}
-                      className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all inline-flex items-center justify-center"
-                    >
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                      Từ chối
-                    </button>
+                  <div className="pt-4 border-t border-gray-100 space-y-3">
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => handlePreview(dataset.datasetId)}
+                        disabled={loadingPreview}
+                        className="flex-1 bg-blue-50 text-blue-600 px-4 py-2 rounded-lg font-semibold hover:bg-blue-100 transition-all inline-flex items-center justify-center border border-blue-200 disabled:opacity-50"
+                      >
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        Xem trước
+                      </button>
+                      <button
+                        onClick={() => handleDownloadForReview(dataset.datasetId, dataset.name)}
+                        disabled={downloading === dataset.datasetId}
+                        className="flex-1 bg-purple-50 text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-purple-100 transition-all inline-flex items-center justify-center border border-purple-200 disabled:opacity-50"
+                      >
+                        {downloading === dataset.datasetId ? (
+                          <span className="flex items-center gap-2">
+                            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            Downloading...
+                          </span>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            Download
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => handleReview(dataset, 'approve')}
+                        className="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all inline-flex items-center justify-center"
+                      >
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Phê duyệt
+                      </button>
+                      <button
+                        onClick={() => handleReview(dataset, 'reject')}
+                        className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all inline-flex items-center justify-center"
+                      >
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Từ chối
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -269,6 +343,77 @@ export default function ModeratorReview() {
                   {submitting ? 'Đang xử lý...' : action === 'approve' ? 'Xác nhận phê duyệt' : 'Xác nhận từ chối'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal */}
+      {previewModal && previewData && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    👁️ Xem trước Dataset
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">{previewData.datasetName}</p>
+                </div>
+                <button
+                  onClick={() => setPreviewModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto p-6">
+              <div className="grid grid-cols-3 gap-4 mb-4 text-sm">
+                <div className="bg-blue-50 rounded-lg p-3">
+                  <div className="text-blue-600 font-semibold">Tổng records</div>
+                  <div className="text-2xl font-bold text-blue-900">{previewData.totalRecords}</div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-3">
+                  <div className="text-green-600 font-semibold">Sample size</div>
+                  <div className="text-2xl font-bold text-green-900">{previewData.sampleSize}</div>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-3">
+                  <div className="text-purple-600 font-semibold">Has File</div>
+                  <div className="text-2xl font-bold text-purple-900">
+                    {previewData.hasFile ? '✅' : '❌'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                <h3 className="font-semibold text-gray-900 mb-3">Sample Records (10 đầu tiên):</h3>
+                <div className="space-y-2 max-h-96 overflow-auto">
+                  {previewData.sampleRecords && previewData.sampleRecords.length > 0 ? (
+                    previewData.sampleRecords.map((record: string, idx: number) => (
+                      <div key={idx} className="bg-white p-3 rounded-lg border border-gray-200 font-mono text-xs overflow-x-auto">
+                        <pre className="whitespace-pre-wrap">{record}</pre>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-gray-600">
+                      Không có data sample
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={() => setPreviewModal(false)}
+                className="flex-1 bg-gray-100 text-gray-700 px-6 py-3 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
+              >
+                Đóng
+              </button>
             </div>
           </div>
         </div>

@@ -36,5 +36,27 @@ export const moderationApi = {
   reject: async (datasetId: number, comments: string): Promise<void> => {
     return moderationApi.review(datasetId, 'Rejected', comments)
   },
+
+  /**
+   * GET /api/moderation/{id}/preview
+   * Preview dataset data for quality check (Moderator only)
+   */
+  preview: async (datasetId: number, sampleSize: number = 10): Promise<any> => {
+    const response = await client.get(`/moderation/${datasetId}/preview`, {
+      params: { sampleSize }
+    })
+    return response.data
+  },
+
+  /**
+   * GET /api/moderation/{id}/download
+   * Download dataset file for review (Moderator only)
+   */
+  downloadForReview: async (datasetId: number): Promise<Blob> => {
+    const response = await client.get(`/moderation/${datasetId}/download`, {
+      responseType: 'blob'
+    })
+    return response.data
+  },
 }
 
