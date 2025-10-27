@@ -16,4 +16,5 @@ public class Province
 
     // Navigation properties
     public ICollection<Subscription> Subscriptions { get; set; } = new List<Subscription>();
+    public ICollection<DataProvider> DataProviders { get; set; } = new List<DataProvider>();
 }

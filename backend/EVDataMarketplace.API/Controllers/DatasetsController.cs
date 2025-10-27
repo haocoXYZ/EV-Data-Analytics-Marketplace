@@ -71,7 +71,9 @@ public class DatasetsController : ControllerBase
                 Status = d.Status,
                 ModerationStatus = d.ModerationStatus,
                 TierName = d.PricingTier!.TierName,
-                BasePricePerMb = d.PricingTier.BasePricePerMb
+                BasePricePerMb = d.PricingTier.BasePricePerMb,
+                ApiPricePerCall = d.PricingTier.ApiPricePerCall,
+                SubscriptionPricePerRegion = d.PricingTier.SubscriptionPricePerRegion
             })
             .ToListAsync();
 
@@ -108,7 +110,9 @@ public class DatasetsController : ControllerBase
             Status = dataset.Status,
             ModerationStatus = dataset.ModerationStatus,
             TierName = dataset.PricingTier?.TierName,
-            BasePricePerMb = dataset.PricingTier?.BasePricePerMb
+            BasePricePerMb = dataset.PricingTier?.BasePricePerMb,
+            ApiPricePerCall = dataset.PricingTier?.ApiPricePerCall,
+            SubscriptionPricePerRegion = dataset.PricingTier?.SubscriptionPricePerRegion
         });
     }
 
@@ -150,10 +154,10 @@ public class DatasetsController : ControllerBase
         return Ok(datasets);
     }
 
-    // GET: api/datasets/my-purchases - Consumer xem datasets da mua
+    // GET: api/datasets/my-purchases - Consumer xem datasets da mua (ALL TYPES)
     [Authorize(Roles = "DataConsumer")]
     [HttpGet("my-purchases")]
-    public async Task<ActionResult<IEnumerable<object>>> GetMyPurchasedDatasets()
+    public async Task<ActionResult<object>> GetMyPurchasedDatasets()
     {
         var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
 
@@ -163,7 +167,8 @@ public class DatasetsController : ControllerBase
             return NotFound(new { message = "Consumer profile not found" });
         }
 
-        var purchasedDatasets = await _context.OneTimePurchases
+        // Get One-Time Purchases
+        var oneTimePurchases = await _context.OneTimePurchases
             .Include(p => p.Dataset)
                 .ThenInclude(d => d!.DataProvider)
                     .ThenInclude(dp => dp!.User)
@@ -172,7 +177,8 @@ public class DatasetsController : ControllerBase
             .Where(p => p.ConsumerId == consumer.ConsumerId && p.Status == "Completed")
             .Select(p => new
             {
-                p.OtpId,
+                PurchaseType = "OneTime",
+                PurchaseId = p.OtpId,
                 p.DatasetId,
                 Dataset = new DatasetDto
                 {
@@ -190,9 +196,8 @@ public class DatasetsController : ControllerBase
                     TierName = p.Dataset.PricingTier!.TierName,
                     BasePricePerMb = p.Dataset.PricingTier.BasePricePerMb
                 },
-                Purchase = new
+                PurchaseDetails = new
                 {
-                    p.OtpId,
                     p.PurchaseDate,
                     p.StartDate,
                     p.EndDate,
@@ -205,7 +210,99 @@ public class DatasetsController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(purchasedDatasets);
+        // Get Subscriptions
+        var subscriptions = await _context.Subscriptions
+            .Include(s => s.Dataset)
+                .ThenInclude(d => d!.DataProvider)
+                    .ThenInclude(dp => dp!.User)
+            .Include(s => s.Dataset)
+                .ThenInclude(d => d!.PricingTier)
+            .Include(s => s.Province)
+            .Where(s => s.ConsumerId == consumer.ConsumerId && s.RenewalStatus == "Active")
+            .Select(s => new
+            {
+                PurchaseType = "Subscription",
+                PurchaseId = s.SubId,
+                s.DatasetId,
+                Dataset = new DatasetDto
+                {
+                    DatasetId = s.Dataset!.DatasetId,
+                    ProviderId = s.Dataset.ProviderId,
+                    ProviderName = s.Dataset.DataProvider!.CompanyName,
+                    Name = s.Dataset.Name,
+                    Description = s.Dataset.Description,
+                    Category = s.Dataset.Category,
+                    DataFormat = s.Dataset.DataFormat,
+                    DataSizeMb = s.Dataset.DataSizeMb,
+                    UploadDate = s.Dataset.UploadDate,
+                    Status = s.Dataset.Status,
+                    ModerationStatus = s.Dataset.ModerationStatus,
+                    TierName = s.Dataset.PricingTier!.TierName
+                },
+                PurchaseDetails = new
+                {
+                    ProvinceName = s.Province!.Name,
+                    s.ProvinceId,
+                    s.SubStart,
+                    s.SubEnd,
+                    s.RenewalCycle,
+                    s.RenewalStatus,
+                    s.RequestCount,
+                    s.TotalPrice
+                }
+            })
+            .ToListAsync();
+
+        // Get API Packages
+        var apiPackages = await _context.APIPackages
+            .Include(a => a.Dataset)
+                .ThenInclude(d => d!.DataProvider)
+                    .ThenInclude(dp => dp!.User)
+            .Include(a => a.Dataset)
+                .ThenInclude(d => d!.PricingTier)
+            .Where(a => a.ConsumerId == consumer.ConsumerId && a.Status == "Active")
+            .Select(a => new
+            {
+                PurchaseType = "APIPackage",
+                PurchaseId = a.ApiId,
+                a.DatasetId,
+                Dataset = new DatasetDto
+                {
+                    DatasetId = a.Dataset!.DatasetId,
+                    ProviderId = a.Dataset.ProviderId,
+                    ProviderName = a.Dataset.DataProvider!.CompanyName,
+                    Name = a.Dataset.Name,
+                    Description = a.Dataset.Description,
+                    Category = a.Dataset.Category,
+                    DataFormat = a.Dataset.DataFormat,
+                    DataSizeMb = a.Dataset.DataSizeMb,
+                    UploadDate = a.Dataset.UploadDate,
+                    Status = a.Dataset.Status,
+                    ModerationStatus = a.Dataset.ModerationStatus,
+                    TierName = a.Dataset.PricingTier!.TierName
+                },
+                PurchaseDetails = new
+                {
+                    a.ApiKey,
+                    a.ApiCallsPurchased,
+                    a.ApiCallsUsed,
+                    CallsRemaining = a.ApiCallsPurchased - a.ApiCallsUsed,
+                    a.PricePerCall,
+                    a.PurchaseDate,
+                    a.ExpiryDate,
+                    a.TotalPaid,
+                    a.Status
+                }
+            })
+            .ToListAsync();
+
+        return Ok(new
+        {
+            OneTimePurchases = oneTimePurchases,
+            Subscriptions = subscriptions,
+            APIPackages = apiPackages,
+            TotalPurchases = oneTimePurchases.Count + subscriptions.Count + apiPackages.Count
+        });
     }
 
     // POST: api/datasets - Provider upload dataset with CSV file and save to database
@@ -563,5 +660,287 @@ public class DatasetsController : ControllerBase
         await _context.SaveChangesAsync();
 
         return NoContent();
+    }
+
+    // GET: api/datasets/{id}/api-key - Get API key for dataset (if purchased via Subscription or API Package)
+    [Authorize(Roles = "DataConsumer")]
+    [HttpGet("{id}/api-key")]
+    public async Task<ActionResult<object>> GetDatasetApiKey(int id)
+    {
+        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+
+        var consumer = await _context.DataConsumers.FirstOrDefaultAsync(c => c.UserId == userId);
+        if (consumer == null)
+        {
+            return NotFound(new { message = "Consumer profile not found" });
+        }
+
+        var dataset = await _context.Datasets.FindAsync(id);
+        if (dataset == null)
+        {
+            return NotFound(new { message = "Dataset not found" });
+        }
+
+        // Check if consumer has active Subscription
+        var activeSubscription = await _context.Subscriptions
+            .FirstOrDefaultAsync(s => s.DatasetId == id 
+                && s.ConsumerId == consumer.ConsumerId 
+                && s.RenewalStatus == "Active");
+
+        if (activeSubscription != null)
+        {
+            return Ok(new
+            {
+                ApiKey = activeSubscription.SubId.ToString(), // Use SubId as API key
+                PurchaseType = "Subscription",
+                PurchaseId = activeSubscription.SubId,
+                ProvinceId = activeSubscription.ProvinceId,
+                SubStart = activeSubscription.SubStart,
+                SubEnd = activeSubscription.SubEnd,
+                RequestCount = activeSubscription.RequestCount,
+                RenewalStatus = activeSubscription.RenewalStatus
+            });
+        }
+
+        // Check if consumer has active API Package
+        var activeApiPackage = await _context.APIPackages
+            .FirstOrDefaultAsync(a => a.DatasetId == id 
+                && a.ConsumerId == consumer.ConsumerId 
+                && a.Status == "Active");
+
+        if (activeApiPackage != null)
+        {
+            return Ok(new
+            {
+                ApiKey = activeApiPackage.ApiKey ?? activeApiPackage.ApiId.ToString(),
+                PurchaseType = "APIPackage",
+                PurchaseId = activeApiPackage.ApiId,
+                ApiCallsPurchased = activeApiPackage.ApiCallsPurchased,
+                ApiCallsUsed = activeApiPackage.ApiCallsUsed,
+                CallsRemaining = activeApiPackage.ApiCallsPurchased - activeApiPackage.ApiCallsUsed,
+                ExpiryDate = activeApiPackage.ExpiryDate
+            });
+        }
+
+        return Forbid("You need to purchase this dataset first (via Subscription or API Package)");
+    }
+
+    // POST: api/datasets/{id}/api/call - Call API để lấy real-time data (cho Subscription và API Package)
+    [Authorize(Roles = "DataConsumer")]
+    [HttpPost("{id}/api/call")]
+    public async Task<ActionResult<object>> CallDatasetApi(int id, [FromBody] Dictionary<string, object>? requestParams)
+    {
+        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+
+        var consumer = await _context.DataConsumers.FirstOrDefaultAsync(c => c.UserId == userId);
+        if (consumer == null)
+        {
+            return NotFound(new { message = "Consumer profile not found" });
+        }
+
+        var dataset = await _context.Datasets
+            .Include(d => d.PricingTier)
+            .FirstOrDefaultAsync(d => d.DatasetId == id);
+
+        if (dataset == null)
+        {
+            return NotFound(new { message = "Dataset not found" });
+        }
+
+        // Check Subscription
+        var activeSubscription = await _context.Subscriptions
+            .Include(s => s.Province)
+            .FirstOrDefaultAsync(s => s.DatasetId == id 
+                && s.ConsumerId == consumer.ConsumerId 
+                && s.RenewalStatus == "Active");
+
+        if (activeSubscription != null)
+        {
+            // Unlimited API calls for Subscription
+            activeSubscription.RequestCount++;
+            await _context.SaveChangesAsync();
+
+            // IMPORTANT: For subscription, get ALL datasets from ALL providers in the same province
+            // In current database structure, providers don't have provinceId field
+            // So we aggregate ALL active datasets to simulate data from multiple providers
+            
+            var provinceId = activeSubscription.ProvinceId;
+            var provinceName = activeSubscription.Province?.Name;
+            
+            // Get all ACTIVE datasets from DIFFERENT providers IN THE SAME PROVINCE
+            // When consumer subscribes to "Hà Nội", they get data from ALL providers in Hà Nội
+            var datasets = await _context.Datasets
+                .Include(d => d.DataProvider)
+                .ThenInclude(p => p!.Province)
+                .Where(d => d.Status == "Active" && d.ModerationStatus == "Approved" && 
+                           d.DataProvider != null && d.DataProvider.ProvinceId == provinceId)
+                .ToListAsync();
+
+            // Group by provider name, taking first dataset from each provider
+            var allActiveDatasets = datasets
+                .GroupBy(d => d.DataProvider != null ? d.DataProvider.CompanyName : "Unknown")
+                .Select(g => g.First())
+                .Take(5) // Limit to 5 providers max
+                .ToList();
+
+            // Aggregate data from multiple providers
+            var allRecords = new List<string>();
+            var providerNames = new List<string>();
+
+            foreach (var ds in allActiveDatasets)
+            {
+                var records = await _context.DatasetRecords
+                    .Where(r => r.DatasetId == ds.DatasetId)
+                    .OrderBy(r => Guid.NewGuid())
+                    .Take(3) // 3 records per provider
+                    .Select(r => r.RecordData)
+                    .ToListAsync();
+                
+                allRecords.AddRange(records);
+                if (ds.DataProvider != null)
+                {
+                    providerNames.Add(ds.DataProvider.CompanyName);
+                }
+            }
+
+            return Ok(new
+            {
+                data = allRecords,
+                purchaseType = "Subscription",
+                subscriptionId = activeSubscription.SubId,
+                province = provinceName,
+                provinceId = provinceId,
+                datasetsIncluded = allActiveDatasets.Select(d => new 
+                { 
+                    d.DatasetId, 
+                    d.Name, 
+                    providerName = d.DataProvider?.CompanyName ?? "Unknown",
+                    d.Category
+                }).ToList(),
+                providersAggregated = providerNames,
+                totalProviders = allActiveDatasets.Count,
+                requestCount = activeSubscription.RequestCount,
+                message = $"Unlimited API calls - Aggregated EV data from {allActiveDatasets.Count} different providers"
+            });
+        }
+
+        // Check API Package
+        var activeApiPackage = await _context.APIPackages
+            .FirstOrDefaultAsync(a => a.DatasetId == id 
+                && a.ConsumerId == consumer.ConsumerId 
+                && a.Status == "Active"
+                && a.ApiCallsUsed < a.ApiCallsPurchased);
+
+        if (activeApiPackage != null)
+        {
+            // Limited API calls
+            activeApiPackage.ApiCallsUsed++;
+            
+            // Check if exhausted
+            if (activeApiPackage.ApiCallsUsed >= activeApiPackage.ApiCallsPurchased)
+            {
+                activeApiPackage.Status = "Exhausted";
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Get sample data
+            var records = await _context.DatasetRecords
+                .Where(r => r.DatasetId == id)
+                .OrderBy(r => Guid.NewGuid())
+                .Take(10)
+                .Select(r => r.RecordData)
+                .ToListAsync();
+
+            return Ok(new
+            {
+                data = records,
+                purchaseType = "APIPackage",
+                apiPackageId = activeApiPackage.ApiId,
+                callsRemaining = activeApiPackage.ApiCallsPurchased - activeApiPackage.ApiCallsUsed,
+                status = activeApiPackage.Status
+            });
+        }
+
+        return Forbid("No active purchase found for this dataset");
+    }
+
+    // GET: api/datasets/my-subscriptions - List all active subscriptions
+    [Authorize(Roles = "DataConsumer")]
+    [HttpGet("my-subscriptions")]
+    public async Task<ActionResult<IEnumerable<object>>> GetMySubscriptions()
+    {
+        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+
+        var consumer = await _context.DataConsumers.FirstOrDefaultAsync(c => c.UserId == userId);
+        if (consumer == null)
+        {
+            return NotFound(new { message = "Consumer profile not found" });
+        }
+
+        var subscriptions = await _context.Subscriptions
+            .Include(s => s.Dataset)
+                .ThenInclude(d => d!.DataProvider)
+            .Include(s => s.Province)
+            .Where(s => s.ConsumerId == consumer.ConsumerId)
+            .Select(s => new
+            {
+                s.SubId,
+                Dataset = new
+                {
+                    s.Dataset!.DatasetId,
+                    s.Dataset.Name,
+                    ProviderName = s.Dataset.DataProvider!.CompanyName
+                },
+                ProvinceName = s.Province!.Name,
+                s.SubStart,
+                s.SubEnd,
+                s.RenewalStatus,
+                s.RenewalCycle,
+                s.RequestCount,
+                s.TotalPrice
+            })
+            .ToListAsync();
+
+        return Ok(subscriptions);
+    }
+
+    // GET: api/datasets/my-api-packages - List all API packages
+    [Authorize(Roles = "DataConsumer")]
+    [HttpGet("my-api-packages")]
+    public async Task<ActionResult<IEnumerable<object>>> GetMyApiPackages()
+    {
+        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+
+        var consumer = await _context.DataConsumers.FirstOrDefaultAsync(c => c.UserId == userId);
+        if (consumer == null)
+        {
+            return NotFound(new { message = "Consumer profile not found" });
+        }
+
+        var apiPackages = await _context.APIPackages
+            .Include(a => a.Dataset)
+                .ThenInclude(d => d!.DataProvider)
+            .Where(a => a.ConsumerId == consumer.ConsumerId)
+            .Select(a => new
+            {
+                a.ApiId,
+                Dataset = new
+                {
+                    a.Dataset!.DatasetId,
+                    a.Dataset.Name,
+                    ProviderName = a.Dataset.DataProvider!.CompanyName
+                },
+                a.ApiKey,
+                a.ApiCallsPurchased,
+                a.ApiCallsUsed,
+                CallsRemaining = a.ApiCallsPurchased - a.ApiCallsUsed,
+                a.PurchaseDate,
+                a.ExpiryDate,
+                a.Status
+            })
+            .ToListAsync();
+
+        return Ok(apiPackages);
     }
 }

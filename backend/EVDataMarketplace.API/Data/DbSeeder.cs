@@ -145,6 +145,11 @@ public static class DbSeeder
             context.Users.AddRange(providerUsers);
             context.SaveChanges();
 
+            var provinces = context.Provinces.ToList();
+            var haNoi = provinces.First(p => p.Name == "Hà Nội");
+            var hcm = provinces.First(p => p.Name == "TP Hồ Chí Minh");
+            var daNang = provinces.First(p => p.Name == "Đà Nẵng");
+
             var providers = new List<DataProvider>
             {
                 new DataProvider
@@ -155,6 +160,7 @@ public static class DbSeeder
                     ContactEmail = "provider1@vinfast.vn",
                     ContactPhone = "0901234567",
                     Address = "Hà Nội, Việt Nam",
+                    ProvinceId = haNoi.ProvinceId,
                     CreatedAt = DateTime.Now
                 },
                 new DataProvider
@@ -165,6 +171,7 @@ public static class DbSeeder
                     ContactEmail = "provider2@evn.vn",
                     ContactPhone = "0902345678",
                     Address = "TP Hồ Chí Minh, Việt Nam",
+                    ProvinceId = hcm.ProvinceId,
                     CreatedAt = DateTime.Now
                 },
                 new DataProvider
@@ -175,6 +182,7 @@ public static class DbSeeder
                     ContactEmail = "provider3@greencharge.vn",
                     ContactPhone = "0903456789",
                     Address = "Đà Nẵng, Việt Nam",
+                    ProvinceId = daNang.ProvinceId,
                     CreatedAt = DateTime.Now
                 }
             };
@@ -306,6 +314,51 @@ public static class DbSeeder
 
             context.DataConsumers.AddRange(consumers);
             context.SaveChanges();
+
+            // Seed Sample DatasetRecords for testing
+            if (!context.DatasetRecords.Any())
+            {
+                var approvedDatasets = context.Datasets
+                    .Where(d => d.ModerationStatus == "Approved" && d.Status == "Active")
+                    .ToList();
+
+                var sampleRecords = new List<DatasetRecord>();
+
+                // Add sample records for each approved dataset
+                foreach (var dataset in approvedDatasets)
+                {
+                    for (int i = 0; i < 10; i++)
+                    {
+                        var recordData = $$"""
+                        {
+                            "session_id": "{{Guid.NewGuid()}}",
+                            "timestamp": "{{DateTime.Now.AddMinutes(-i * 15).ToString("yyyy-MM-dd HH:mm:ss")}}",
+                            "charging_station_id": "STATION-{{i + 1:000}}",
+                            "location": "{{dataset.Category}} Location {{i + 1}}",
+                            "energy_delivered_kwh": {{5.5 + i * 0.3}},
+                            "duration_minutes": {{20 + i * 2}},
+                            "vehicle_type": "EV{{i % 3 + 1}}",
+                            "battery_level_start": {{80 + i}},
+                            "battery_level_end": {{95 + i}},
+                            "temperature": {{25 + i * 0.5}},
+                            "payment_method": "{{(i % 2 == 0 ? "Credit Card" : "Subscription")}}",
+                            "cost": {{100000 + i * 5000}}
+                        }
+                        """;
+
+                        sampleRecords.Add(new DatasetRecord
+                        {
+                            DatasetId = dataset.DatasetId,
+                            RecordData = recordData,
+                            RowNumber = i + 1,
+                            CreatedAt = DateTime.Now.AddMinutes(-i * 15)
+                        });
+                    }
+                }
+
+                context.DatasetRecords.AddRange(sampleRecords);
+                context.SaveChanges();
+            }
         }
     }
 }

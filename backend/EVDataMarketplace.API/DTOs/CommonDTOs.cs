@@ -68,6 +68,8 @@ public class DatasetDto
     public string? ModerationStatus { get; set; }
     public string? TierName { get; set; }
     public decimal? BasePricePerMb { get; set; }
+    public decimal? ApiPricePerCall { get; set; }
+    public decimal? SubscriptionPricePerRegion { get; set; }
 }
 
 // Purchase DTOs

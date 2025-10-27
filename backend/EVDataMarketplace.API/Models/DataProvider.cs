@@ -34,12 +34,18 @@ public class DataProvider
     [Column("address")]
     public string? Address { get; set; }
 
+    [Column("province_id")]
+    public int? ProvinceId { get; set; }
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     // Navigation properties
     [ForeignKey("UserId")]
     public User User { get; set; } = null!;
+
+    [ForeignKey("ProvinceId")]
+    public Province? Province { get; set; }
 
     public ICollection<Dataset> Datasets { get; set; } = new List<Dataset>();
     public ICollection<RevenueShare> RevenueShares { get; set; } = new List<RevenueShare>();

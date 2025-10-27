@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace EVDataMarketplace.API.Migrations
 {
     [DbContext(typeof(EVDataMarketplaceDbContext))]
-    [Migration("20251026114521_AddDatasetRecordsTable")]
-    partial class AddDatasetRecordsTable
+    [Migration("20251027025653_AddProvinceIdAndDatasetRecords")]
+    partial class AddProvinceIdAndDatasetRecords
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -174,11 +174,17 @@ namespace EVDataMarketplace.API.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("created_at");
 
+                    b.Property<int?>("ProvinceId")
+                        .HasColumnType("int")
+                        .HasColumnName("province_id");
+
                     b.Property<int>("UserId")
                         .HasColumnType("int")
                         .HasColumnName("user_id");
 
                     b.HasKey("ProviderId");
+
+                    b.HasIndex("ProvinceId");
 
                     b.HasIndex("UserId")
                         .IsUnique();
@@ -807,11 +813,17 @@ namespace EVDataMarketplace.API.Migrations
 
             modelBuilder.Entity("EVDataMarketplace.API.Models.DataProvider", b =>
                 {
+                    b.HasOne("EVDataMarketplace.API.Models.Province", "Province")
+                        .WithMany("DataProviders")
+                        .HasForeignKey("ProvinceId");
+
                     b.HasOne("EVDataMarketplace.API.Models.User", "User")
                         .WithOne("DataProvider")
                         .HasForeignKey("EVDataMarketplace.API.Models.DataProvider", "UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Province");
 
                     b.Navigation("User");
                 });
@@ -990,6 +1002,8 @@ namespace EVDataMarketplace.API.Migrations
 
             modelBuilder.Entity("EVDataMarketplace.API.Models.Province", b =>
                 {
+                    b.Navigation("DataProviders");
+
                     b.Navigation("Subscriptions");
                 });
 
