@@ -1,0 +1,13 @@
+/* Fix viền xanh (focus halo) của AntD Button type="link" trong bảng .table-nowrap */
+.table-nowrap .ant-btn-link:focus,
+.table-nowrap .ant-btn-link:focus-visible,
+.table-nowrap .ant-btn-link:focus-within {
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* Thêm chút đệm để chữ không bị chạm mép khi được focus */
+.table-nowrap .ant-btn-link {
+  padding: 0 2px;
+  margin: 0 -2px; /* giữ tổng bề rộng như cũ */
+}
