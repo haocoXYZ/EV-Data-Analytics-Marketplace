@@ -1,203 +1,318 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 using EVDataMarketplace.API.Data;
-using EVDataMarketplace.API.DTOs;
 using EVDataMarketplace.API.Models;
-using EVDataMarketplace.API.Services;
+using System.Security.Claims;
 
 namespace EVDataMarketplace.API.Controllers;
 
-// B3: Moderator kiem duyet va dang tai thong tin cua Data Provider
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin,Moderator")]
+[Authorize(Roles = "Moderator,Admin")]
 public class ModerationController : ControllerBase
 {
     private readonly EVDataMarketplaceDbContext _context;
-    private readonly IFileService _fileService;
-    private readonly ICsvParserService _csvParserService;
 
-    public ModerationController(EVDataMarketplaceDbContext context, IFileService fileService, ICsvParserService csvParserService)
+    public ModerationController(EVDataMarketplaceDbContext context)
     {
         _context = context;
-        _fileService = fileService;
-        _csvParserService = csvParserService;
     }
 
-    // GET: api/moderation/pending - Lay tat ca datasets dang cho kiem duyet
+    /// <summary>
+    /// Get pending datasets for moderation
+    /// </summary>
     [HttpGet("pending")]
-    public async Task<ActionResult<IEnumerable<DatasetDto>>> GetPendingDatasets()
+    public async Task<IActionResult> GetPendingDatasets()
     {
         var datasets = await _context.Datasets
             .Include(d => d.DataProvider)
-                .ThenInclude(dp => dp!.User)
-            .Include(d => d.PricingTier)
+                .ThenInclude(p => p!.User)
             .Where(d => d.ModerationStatus == "Pending" || d.ModerationStatus == "UnderReview")
-            .Select(d => new DatasetDto
+            .OrderBy(d => d.UploadDate)
+            .Select(d => new
             {
-                DatasetId = d.DatasetId,
-                ProviderId = d.ProviderId,
-                ProviderName = d.DataProvider!.CompanyName,
-                Name = d.Name,
-                Description = d.Description,
-                Category = d.Category,
-                DataFormat = d.DataFormat,
-                DataSizeMb = d.DataSizeMb,
-                UploadDate = d.UploadDate,
-                Status = d.Status,
-                ModerationStatus = d.ModerationStatus,
-                TierName = d.PricingTier!.TierName
+                datasetId = d.DatasetId,
+                name = d.Name,
+                description = d.Description,
+                category = d.Category,
+                rowCount = d.RowCount,
+                uploadDate = d.UploadDate,
+                moderationStatus = d.ModerationStatus,
+                provider = new
+                {
+                    providerId = d.DataProvider!.ProviderId,
+                    companyName = d.DataProvider.CompanyName,
+                    contactEmail = d.DataProvider.ContactEmail
+                }
             })
             .ToListAsync();
 
         return Ok(datasets);
     }
 
-    // POST: api/moderation/review - Kiem duyet dataset
-    [HttpPost("review")]
-    public async Task<IActionResult> ReviewDataset([FromBody] DatasetModerationDto request)
+    /// <summary>
+    /// Get dataset details for moderation
+    /// </summary>
+    [HttpGet("{datasetId}")]
+    public async Task<IActionResult> GetDatasetForModeration(int datasetId)
     {
-        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
-
-        var dataset = await _context.Datasets.FindAsync(request.DatasetId);
+        var dataset = await _context.Datasets
+            .Include(d => d.DataProvider)
+                .ThenInclude(p => p!.User)
+            .Include(d => d.DatasetModerations)
+                .ThenInclude(m => m.Moderator)
+            .FirstOrDefaultAsync(d => d.DatasetId == datasetId);
 
         if (dataset == null)
         {
             return NotFound(new { message = "Dataset not found" });
         }
 
-        // Validate moderation status
-        if (request.ModerationStatus != "Approved" && request.ModerationStatus != "Rejected")
+        return Ok(new
         {
-            return BadRequest(new { message = "Invalid moderation status. Must be Approved or Rejected" });
+            datasetId = dataset.DatasetId,
+            name = dataset.Name,
+            description = dataset.Description,
+            category = dataset.Category,
+            rowCount = dataset.RowCount,
+            uploadDate = dataset.UploadDate,
+            lastUpdated = dataset.LastUpdated,
+            status = dataset.Status,
+            moderationStatus = dataset.ModerationStatus,
+            provider = new
+            {
+                providerId = dataset.DataProvider!.ProviderId,
+                companyName = dataset.DataProvider.CompanyName,
+                contactEmail = dataset.DataProvider.ContactEmail,
+                contactPhone = dataset.DataProvider.ContactPhone
+            },
+            moderationHistory = dataset.DatasetModerations.Select(m => new
+            {
+                moderationId = m.ModerationId,
+                reviewDate = m.ReviewDate,
+                status = m.ModerationStatus,
+                comments = m.Comments,
+                moderatorName = m.Moderator?.FullName
+            }).ToList()
+        });
+    }
+
+    /// <summary>
+    /// Preview dataset records (paginated)
+    /// </summary>
+    [HttpGet("{datasetId}/preview-data")]
+    public async Task<IActionResult> PreviewData(
+        int datasetId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50)
+    {
+        var dataset = await _context.Datasets.FindAsync(datasetId);
+        if (dataset == null)
+        {
+            return NotFound(new { message = "Dataset not found" });
         }
 
-        // Update dataset moderation status
-        dataset.ModerationStatus = request.ModerationStatus;
-
-        if (request.ModerationStatus == "Approved")
+        if (pageSize > 100)
         {
-            dataset.Status = "Active";
-            dataset.Visibility = "Public";
-        }
-        else if (request.ModerationStatus == "Rejected")
-        {
-            dataset.Status = "Rejected";
-            dataset.Visibility = "Private";
+            pageSize = 100; // Max page size
         }
 
+        var totalRecords = await _context.DatasetRecords
+            .CountAsync(r => r.DatasetId == datasetId);
+
+        var records = await _context.DatasetRecords
+            .Include(r => r.Province)
+            .Include(r => r.District)
+            .Where(r => r.DatasetId == datasetId)
+            .OrderBy(r => r.ChargingTimestamp)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(r => new
+            {
+                recordId = r.RecordId,
+                stationId = r.StationId,
+                stationName = r.StationName,
+                stationAddress = r.StationAddress,
+                stationOperator = r.StationOperator,
+                provinceName = r.Province != null ? r.Province.Name : "Unknown",
+                districtName = r.District != null ? r.District.Name : "Unknown",
+                chargingTimestamp = r.ChargingTimestamp,
+                energyKwh = r.EnergyKwh,
+                voltage = r.Voltage,
+                current = r.Current,
+                powerKw = r.PowerKw,
+                durationMinutes = r.DurationMinutes,
+                chargingCost = r.ChargingCost,
+                vehicleType = r.VehicleType,
+                batteryCapacityKwh = r.BatteryCapacityKwh,
+                socStart = r.SocStart,
+                socEnd = r.SocEnd,
+                dataSource = r.DataSource
+            })
+            .ToListAsync();
+
+        return Ok(new
+        {
+            datasetId,
+            datasetName = dataset.Name,
+            totalRecords,
+            currentPage = page,
+            pageSize,
+            totalPages = (int)Math.Ceiling((double)totalRecords / pageSize),
+            records
+        });
+    }
+
+    /// <summary>
+    /// Approve dataset
+    /// </summary>
+    [HttpPut("{datasetId}/approve")]
+    public async Task<IActionResult> ApproveDataset(int datasetId, [FromBody] ModerationActionDto? dto)
+    {
+        var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+        if (string.IsNullOrEmpty(userEmail))
+        {
+            return Unauthorized(new { message = "User email not found" });
+        }
+
+        var moderator = await _context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
+        if (moderator == null)
+        {
+            return NotFound(new { message = "Moderator not found" });
+        }
+
+        var dataset = await _context.Datasets.FindAsync(datasetId);
+        if (dataset == null)
+        {
+            return NotFound(new { message = "Dataset not found" });
+        }
+
+        // Update dataset status
+        dataset.ModerationStatus = "Approved";
+        dataset.Status = "Active";
         dataset.LastUpdated = DateTime.Now;
 
         // Create moderation record
         var moderation = new DatasetModeration
         {
-            DatasetId = request.DatasetId,
-            ModeratorUserId = userId,
+            DatasetId = datasetId,
+            ModeratorUserId = moderator.UserId,
             ReviewDate = DateTime.Now,
-            ModerationStatus = request.ModerationStatus,
-            Comments = request.Comments
+            ModerationStatus = "Approved",
+            Comments = dto?.Comments ?? "Dataset approved"
         };
 
         _context.DatasetModerations.Add(moderation);
         await _context.SaveChangesAsync();
 
-        return Ok(new { message = $"Dataset {request.ModerationStatus.ToLower()} successfully" });
-    }
-
-    // GET: api/moderation/history/5 - Xem lich su kiem duyet cua dataset
-    [HttpGet("history/{datasetId}")]
-    public async Task<ActionResult<IEnumerable<object>>> GetModerationHistory(int datasetId)
-    {
-        var history = await _context.DatasetModerations
-            .Include(m => m.Moderator)
-            .Where(m => m.DatasetId == datasetId)
-            .OrderByDescending(m => m.ReviewDate)
-            .Select(m => new
-            {
-                m.ModerationId,
-                m.DatasetId,
-                ModeratorName = m.Moderator!.FullName,
-                m.ReviewDate,
-                m.ModerationStatus,
-                m.Comments
-            })
-            .ToListAsync();
-
-        return Ok(history);
-    }
-
-    // GET: api/moderation/{id}/preview - Xem data sample để kiểm tra chất lượng (Moderator only)
-    [HttpGet("{id}/preview")]
-    public async Task<ActionResult<object>> PreviewDataset(int id, [FromQuery] int sampleSize = 10)
-    {
-        var dataset = await _context.Datasets.FindAsync(id);
-        
-        if (dataset == null)
-        {
-            return NotFound(new { message = "Dataset not found" });
-        }
-
-        // Get sample records from database
-        var records = await _context.DatasetRecords
-            .Where(r => r.DatasetId == id)
-            .OrderBy(r => r.RowNumber)
-            .Take(sampleSize)
-            .Select(r => r.RecordData)
-            .ToListAsync();
-
-        // Get total record count
-        var totalRecords = await _context.DatasetRecords.CountAsync(r => r.DatasetId == id);
-
         return Ok(new
         {
-            datasetId = id,
-            datasetName = dataset.Name,
-            totalRecords = totalRecords,
-            sampleSize = records.Count,
-            sampleRecords = records,
-            hasFile = !string.IsNullOrEmpty(dataset.FilePath) && _fileService.FileExists(dataset.FilePath ?? ""),
-            filePath = dataset.FilePath
+            message = "Dataset approved successfully",
+            datasetId,
+            moderationStatus = dataset.ModerationStatus,
+            status = dataset.Status
         });
     }
 
-    // GET: api/moderation/{id}/download - Download full file để kiểm tra (Moderator only)
-    [HttpGet("{id}/download")]
-    public async Task<IActionResult> DownloadDatasetForReview(int id)
+    /// <summary>
+    /// Reject dataset
+    /// </summary>
+    [HttpPut("{datasetId}/reject")]
+    public async Task<IActionResult> RejectDataset(int datasetId, [FromBody] ModerationActionDto dto)
     {
-        var dataset = await _context.Datasets.FindAsync(id);
-        
+        if (string.IsNullOrWhiteSpace(dto?.Comments))
+        {
+            return BadRequest(new { message = "Rejection reason (comments) is required" });
+        }
+
+        var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+        if (string.IsNullOrEmpty(userEmail))
+        {
+            return Unauthorized(new { message = "User email not found" });
+        }
+
+        var moderator = await _context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
+        if (moderator == null)
+        {
+            return NotFound(new { message = "Moderator not found" });
+        }
+
+        var dataset = await _context.Datasets.FindAsync(datasetId);
         if (dataset == null)
         {
             return NotFound(new { message = "Dataset not found" });
         }
 
-        // Download from file if available
-        if (!string.IsNullOrEmpty(dataset.FilePath) && _fileService.FileExists(dataset.FilePath))
+        // Update dataset status
+        dataset.ModerationStatus = "Rejected";
+        dataset.Status = "Inactive";
+        dataset.LastUpdated = DateTime.Now;
+
+        // Create moderation record
+        var moderation = new DatasetModeration
         {
-            var stream = await _fileService.DownloadFileAsync(dataset.FilePath);
-            var fileName = Path.GetFileName(dataset.FilePath);
-            return File(stream, "application/octet-stream", fileName);
+            DatasetId = datasetId,
+            ModeratorUserId = moderator.UserId,
+            ReviewDate = DateTime.Now,
+            ModerationStatus = "Rejected",
+            Comments = dto.Comments
+        };
+
+        _context.DatasetModerations.Add(moderation);
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = "Dataset rejected",
+            datasetId,
+            moderationStatus = dataset.ModerationStatus,
+            status = dataset.Status,
+            reason = dto.Comments
+        });
+    }
+
+    /// <summary>
+    /// Get all datasets with moderation status
+    /// </summary>
+    [HttpGet("all")]
+    public async Task<IActionResult> GetAllDatasets([FromQuery] string? status)
+    {
+        var query = _context.Datasets
+            .Include(d => d.DataProvider)
+                .ThenInclude(p => p!.User)
+            .AsQueryable();
+
+        if (!string.IsNullOrEmpty(status))
+        {
+            query = query.Where(d => d.ModerationStatus == status);
         }
 
-        // Otherwise, generate CSV from database records
-        var records = await _context.DatasetRecords
-            .Where(r => r.DatasetId == id)
-            .OrderBy(r => r.RowNumber)
-            .Select(r => r.RecordData)
+        var datasets = await query
+            .OrderByDescending(d => d.UploadDate)
+            .Select(d => new
+            {
+                datasetId = d.DatasetId,
+                name = d.Name,
+                description = d.Description,
+                category = d.Category,
+                rowCount = d.RowCount,
+                uploadDate = d.UploadDate,
+                status = d.Status,
+                moderationStatus = d.ModerationStatus,
+                provider = new
+                {
+                    providerId = d.DataProvider!.ProviderId,
+                    companyName = d.DataProvider.CompanyName
+                }
+            })
             .ToListAsync();
 
-        if (records.Count == 0)
-        {
-            return NotFound(new { message = "No data found for this dataset" });
-        }
-
-        // Generate CSV from records
-        var csvContent = _csvParserService.ConvertRecordsToCsv(records);
-        var bytes = System.Text.Encoding.UTF8.GetBytes(csvContent);
-        var memoryStream = new MemoryStream(bytes);
-
-        return File(memoryStream, "text/csv", $"{dataset.Name?.Replace(" ", "_")}_review.csv");
+        return Ok(datasets);
     }
+}
+
+public class ModerationActionDto
+{
+    public string? Comments { get; set; }
 }

@@ -10,18 +10,17 @@ public class Dataset
     [Column("dataset_id")]
     public int DatasetId { get; set; }
 
+    [Required]
     [Column("provider_id")]
-    public int? ProviderId { get; set; }
+    public int ProviderId { get; set; }
 
     [Column("port_id")]
     public int? PortId { get; set; }
 
-    [Column("tier_id")]
-    public int? TierId { get; set; }
-
+    [Required]
     [MaxLength(255)]
     [Column("name")]
-    public string? Name { get; set; }
+    public string Name { get; set; } = string.Empty;
 
     [Column("description")]
     public string? Description { get; set; }
@@ -32,13 +31,13 @@ public class Dataset
 
     [MaxLength(50)]
     [Column("data_format")]
-    public string? DataFormat { get; set; }
+    public string? DataFormat { get; set; } = "CSV";
 
-    [Column("data_size_mb")]
-    public decimal? DataSizeMb { get; set; }
+    [Column("row_count")]
+    public int RowCount { get; set; } = 0; // Số dòng dữ liệu trong dataset
 
     [Column("upload_date")]
-    public DateTime? UploadDate { get; set; }
+    public DateTime UploadDate { get; set; } = DateTime.Now;
 
     [Column("last_updated")]
     public DateTime? LastUpdated { get; set; }
@@ -55,20 +54,10 @@ public class Dataset
     [Column("moderation_status")]
     public string ModerationStatus { get; set; } = "Pending"; // Pending, UnderReview, Approved, Rejected
 
-    [MaxLength(500)]
-    [Column("file_path")]
-    public string? FilePath { get; set; }
-
     // Navigation properties
     [ForeignKey("ProviderId")]
     public DataProvider? DataProvider { get; set; }
 
-    [ForeignKey("TierId")]
-    public PricingTier? PricingTier { get; set; }
-
     public ICollection<DatasetModeration> DatasetModerations { get; set; } = new List<DatasetModeration>();
     public ICollection<DatasetRecord> DatasetRecords { get; set; } = new List<DatasetRecord>();
-    public ICollection<OneTimePurchase> OneTimePurchases { get; set; } = new List<OneTimePurchase>();
-    public ICollection<Subscription> Subscriptions { get; set; } = new List<Subscription>();
-    public ICollection<APIPackage> APIPackages { get; set; } = new List<APIPackage>();
 }

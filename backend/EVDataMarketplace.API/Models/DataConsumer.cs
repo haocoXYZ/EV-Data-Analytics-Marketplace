@@ -37,8 +37,9 @@ public class DataConsumer
     [ForeignKey("UserId")]
     public User User { get; set; } = null!;
 
-    public ICollection<OneTimePurchase> OneTimePurchases { get; set; } = new List<OneTimePurchase>();
-    public ICollection<Subscription> Subscriptions { get; set; } = new List<Subscription>();
-    public ICollection<APIPackage> APIPackages { get; set; } = new List<APIPackage>();
+    public ICollection<DataPackagePurchase> DataPackagePurchases { get; set; } = new List<DataPackagePurchase>();
+    public ICollection<SubscriptionPackagePurchase> SubscriptionPackagePurchases { get; set; } = new List<SubscriptionPackagePurchase>();
+    public ICollection<APIPackagePurchase> APIPackagePurchases { get; set; } = new List<APIPackagePurchase>();
+    public ICollection<APIKey> APIKeys { get; set; } = new List<APIKey>();
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();
 }

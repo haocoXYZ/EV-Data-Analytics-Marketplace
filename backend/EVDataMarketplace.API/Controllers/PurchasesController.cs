@@ -1,14 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 using EVDataMarketplace.API.Data;
-using EVDataMarketplace.API.DTOs;
-using EVDataMarketplace.API.Models;
+using System.Security.Claims;
 
 namespace EVDataMarketplace.API.Controllers;
 
-// B5: Data Consumer chon va mua data theo goi
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "DataConsumer")]
@@ -21,287 +18,240 @@ public class PurchasesController : ControllerBase
         _context = context;
     }
 
-    // POST: api/purchases/onetime - Goi mua 1 lan
-    [HttpPost("onetime")]
-    public async Task<ActionResult<object>> CreateOneTimePurchase([FromBody] OneTimePurchaseRequestDto request)
+    /// <summary>
+    /// Get all my purchases (all types)
+    /// </summary>
+    [HttpGet("my-purchases")]
+    public async Task<IActionResult> GetMyPurchases()
     {
-        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+        if (string.IsNullOrEmpty(userEmail))
+        {
+            return Unauthorized(new { message = "User email not found" });
+        }
 
-        var consumer = await _context.DataConsumers.FirstOrDefaultAsync(c => c.UserId == userId);
+        var consumer = await _context.DataConsumers
+            .Include(c => c.User)
+            .FirstOrDefaultAsync(c => c.User.Email == userEmail);
+
         if (consumer == null)
         {
             return NotFound(new { message = "Consumer profile not found" });
         }
 
-        var dataset = await _context.Datasets
-            .Include(d => d.PricingTier)
-            .FirstOrDefaultAsync(d => d.DatasetId == request.DatasetId && d.Status == "Active");
+        // Get data packages
+        var dataPackages = await _context.DataPackagePurchases
+            .Include(p => p.Province)
+            .Include(p => p.District)
+            .Where(p => p.ConsumerId == consumer.ConsumerId)
+            .Select(p => new
+            {
+                type = "DataPackage",
+                id = p.PurchaseId,
+                provinceName = p.Province != null ? p.Province.Name : "Unknown",
+                districtName = p.District != null ? p.District.Name : "All districts",
+                details = $"{p.RowCount} rows",
+                totalPrice = p.TotalPrice,
+                purchaseDate = p.PurchaseDate,
+                status = p.Status,
+                downloadCount = p.DownloadCount,
+                maxDownload = p.MaxDownload
+            })
+            .ToListAsync();
 
-        if (dataset == null)
-        {
-            return NotFound(new { message = "Dataset not found or not available" });
-        }
+        // Get subscriptions
+        var subscriptions = await _context.SubscriptionPackagePurchases
+            .Include(p => p.Province)
+            .Include(p => p.District)
+            .Where(p => p.ConsumerId == consumer.ConsumerId)
+            .Select(p => new
+            {
+                type = "Subscription",
+                id = p.SubscriptionId,
+                provinceName = p.Province != null ? p.Province.Name : "Unknown",
+                districtName = p.District != null ? p.District.Name : "All districts",
+                details = $"{p.BillingCycle} - {p.StartDate:yyyy-MM-dd} to {p.EndDate:yyyy-MM-dd}",
+                totalPrice = p.TotalPaid,
+                purchaseDate = p.PurchaseDate,
+                status = p.Status,
+                dashboardAccessCount = p.DashboardAccessCount,
+                autoRenew = p.AutoRenew
+            })
+            .ToListAsync();
 
-        if (dataset.PricingTier == null || dataset.DataSizeMb == null)
-        {
-            return BadRequest(new { message = "Dataset pricing information incomplete" });
-        }
-
-        // Tinh tien: Fixed 10000 VND for testing PayOS
-        var totalPrice = 10000m; // TEST: Fixed price
-        // var totalPrice = (dataset.PricingTier.BasePricePerMb ?? 0) * dataset.DataSizeMb.Value;
-
-        var purchase = new OneTimePurchase
-        {
-            DatasetId = request.DatasetId,
-            ConsumerId = consumer.ConsumerId,
-            PurchaseDate = DateTime.Now,
-            StartDate = request.StartDate,
-            EndDate = request.EndDate,
-            TotalPrice = totalPrice,
-            LicenseType = request.LicenseType,
-            MaxDownload = 3,
-            Status = "Pending"
-        };
-
-        _context.OneTimePurchases.Add(purchase);
-        await _context.SaveChangesAsync();
+        // Get API packages
+        var apiPackages = await _context.APIPackagePurchases
+            .Include(p => p.Province)
+            .Include(p => p.District)
+            .Where(p => p.ConsumerId == consumer.ConsumerId)
+            .Select(p => new
+            {
+                type = "APIPackage",
+                id = p.ApiPurchaseId,
+                provinceName = p.Province != null ? p.Province.Name : "Nationwide",
+                districtName = p.District != null ? p.District.Name : null,
+                details = $"{p.ApiCallsPurchased} calls ({p.ApiCallsUsed} used)",
+                totalPrice = p.TotalPaid,
+                purchaseDate = p.PurchaseDate,
+                status = p.Status,
+                expiryDate = p.ExpiryDate
+            })
+            .ToListAsync();
 
         return Ok(new
         {
-            purchase.OtpId,
-            purchase.DatasetId,
-            purchase.TotalPrice,
-            purchase.Status,
-            Message = "One-time purchase created. Proceed to payment."
+            dataPackages,
+            subscriptions,
+            apiPackages,
+            totalPurchases = dataPackages.Count + subscriptions.Count + apiPackages.Count
         });
     }
 
-    // POST: api/purchases/subscription - Goi thue bao theo khu vuc
-    [HttpPost("subscription")]
-    public async Task<ActionResult<object>> CreateSubscription([FromBody] SubscriptionRequestDto request)
+    /// <summary>
+    /// Get my data packages
+    /// </summary>
+    [HttpGet("my-data-packages")]
+    public async Task<IActionResult> GetMyDataPackages()
     {
-        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+        if (string.IsNullOrEmpty(userEmail))
+        {
+            return Unauthorized(new { message = "User email not found" });
+        }
 
-        var consumer = await _context.DataConsumers.FirstOrDefaultAsync(c => c.UserId == userId);
+        var consumer = await _context.DataConsumers
+            .Include(c => c.User)
+            .FirstOrDefaultAsync(c => c.User.Email == userEmail);
+
         if (consumer == null)
         {
             return NotFound(new { message = "Consumer profile not found" });
         }
 
-        var dataset = await _context.Datasets
-            .Include(d => d.PricingTier)
-            .FirstOrDefaultAsync(d => d.DatasetId == request.DatasetId && d.Status == "Active");
-
-        if (dataset == null)
-        {
-            return NotFound(new { message = "Dataset not found or not available" });
-        }
-
-        var province = await _context.Provinces.FindAsync(request.ProvinceId);
-        if (province == null)
-        {
-            return NotFound(new { message = "Province not found" });
-        }
-
-        if (dataset.PricingTier == null)
-        {
-            return BadRequest(new { message = "Dataset pricing information incomplete" });
-        }
-
-        // Tinh tien: SubscriptionPricePerRegion * so thang
-        var totalPrice = (dataset.PricingTier.SubscriptionPricePerRegion ?? 0) * request.DurationMonths;
-
-        var subscription = new Subscription
-        {
-            DatasetId = request.DatasetId,
-            ConsumerId = consumer.ConsumerId,
-            ProvinceId = request.ProvinceId,
-            SubStart = DateTime.Now,
-            SubEnd = DateTime.Now.AddMonths(request.DurationMonths),
-            RenewalCycle = request.RenewalCycle,
-            RenewalStatus = "Active",
-            TotalPrice = totalPrice
-        };
-
-        _context.Subscriptions.Add(subscription);
-        await _context.SaveChangesAsync();
-
-        return Ok(new
-        {
-            subscription.SubId,
-            subscription.DatasetId,
-            subscription.ProvinceId,
-            ProvinceName = province.Name,
-            subscription.TotalPrice,
-            subscription.SubStart,
-            subscription.SubEnd,
-            Message = "Subscription created. Proceed to payment."
-        });
-    }
-
-    // POST: api/purchases/api - Goi API theo so luot
-    [HttpPost("api")]
-    public async Task<ActionResult<object>> CreateAPIPackage([FromBody] APIPackageRequestDto request)
-    {
-        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
-
-        var consumer = await _context.DataConsumers.FirstOrDefaultAsync(c => c.UserId == userId);
-        if (consumer == null)
-        {
-            return NotFound(new { message = "Consumer profile not found" });
-        }
-
-        var dataset = await _context.Datasets
-            .Include(d => d.PricingTier)
-            .FirstOrDefaultAsync(d => d.DatasetId == request.DatasetId && d.Status == "Active");
-
-        if (dataset == null)
-        {
-            return NotFound(new { message = "Dataset not found or not available" });
-        }
-
-        if (dataset.PricingTier == null)
-        {
-            return BadRequest(new { message = "Dataset pricing information incomplete" });
-        }
-
-        // Tinh tien: ApiPricePerCall * so luot
-        var pricePerCall = dataset.PricingTier.ApiPricePerCall ?? 0;
-        var totalPaid = pricePerCall * request.ApiCallsCount;
-
-        // Generate API key
-        var apiKey = Guid.NewGuid().ToString("N");
-
-        var apiPackage = new APIPackage
-        {
-            DatasetId = request.DatasetId,
-            ConsumerId = consumer.ConsumerId,
-            ApiKey = apiKey,
-            ApiCallsPurchased = request.ApiCallsCount,
-            ApiCallsUsed = 0,
-            PricePerCall = pricePerCall,
-            PurchaseDate = DateTime.Now,
-            ExpiryDate = DateTime.Now.AddYears(1), // API key valid for 1 year
-            TotalPaid = totalPaid,
-            Status = "Pending"
-        };
-
-        _context.APIPackages.Add(apiPackage);
-        await _context.SaveChangesAsync();
-
-        return Ok(new
-        {
-            apiPackage.ApiId,
-            apiPackage.DatasetId,
-            apiPackage.ApiKey,
-            apiPackage.ApiCallsPurchased,
-            apiPackage.TotalPaid,
-            apiPackage.ExpiryDate,
-            Message = "API package created. Proceed to payment."
-        });
-    }
-
-    // GET: api/purchases/my/onetime
-    [HttpGet("my/onetime")]
-    public async Task<ActionResult<IEnumerable<object>>> GetMyOneTimePurchases()
-    {
-        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
-
-        var consumer = await _context.DataConsumers.FirstOrDefaultAsync(c => c.UserId == userId);
-        if (consumer == null)
-        {
-            return NotFound(new { message = "Consumer profile not found" });
-        }
-
-        var purchases = await _context.OneTimePurchases
-            .Include(p => p.Dataset)
+        var purchases = await _context.DataPackagePurchases
+            .Include(p => p.Province)
+            .Include(p => p.District)
             .Where(p => p.ConsumerId == consumer.ConsumerId)
             .OrderByDescending(p => p.PurchaseDate)
             .Select(p => new
             {
-                p.OtpId,
-                p.DatasetId,
-                DatasetName = p.Dataset!.Name,
-                p.PurchaseDate,
-                p.StartDate,
-                p.EndDate,
-                p.TotalPrice,
-                p.LicenseType,
-                p.DownloadCount,
-                p.MaxDownload,
-                p.Status
+                purchaseId = p.PurchaseId,
+                provinceName = p.Province != null ? p.Province.Name : "Unknown",
+                districtName = p.District != null ? p.District.Name : "All districts",
+                rowCount = p.RowCount,
+                pricePerRow = p.PricePerRow,
+                totalPrice = p.TotalPrice,
+                purchaseDate = p.PurchaseDate,
+                status = p.Status,
+                downloadCount = p.DownloadCount,
+                maxDownload = p.MaxDownload,
+                lastDownloadDate = p.LastDownloadDate,
+                startDate = p.StartDate,
+                endDate = p.EndDate
             })
             .ToListAsync();
 
         return Ok(purchases);
     }
 
-    // GET: api/purchases/my/subscriptions
-    [HttpGet("my/subscriptions")]
-    public async Task<ActionResult<IEnumerable<object>>> GetMySubscriptions()
+    /// <summary>
+    /// Get my subscriptions
+    /// </summary>
+    [HttpGet("my-subscriptions")]
+    public async Task<IActionResult> GetMySubscriptions()
     {
-        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+        if (string.IsNullOrEmpty(userEmail))
+        {
+            return Unauthorized(new { message = "User email not found" });
+        }
 
-        var consumer = await _context.DataConsumers.FirstOrDefaultAsync(c => c.UserId == userId);
+        var consumer = await _context.DataConsumers
+            .Include(c => c.User)
+            .FirstOrDefaultAsync(c => c.User.Email == userEmail);
+
         if (consumer == null)
         {
             return NotFound(new { message = "Consumer profile not found" });
         }
 
-        var subscriptions = await _context.Subscriptions
-            .Include(s => s.Dataset)
-            .Include(s => s.Province)
-            .Where(s => s.ConsumerId == consumer.ConsumerId)
-            .OrderByDescending(s => s.SubStart)
-            .Select(s => new
+        var subscriptions = await _context.SubscriptionPackagePurchases
+            .Include(p => p.Province)
+            .Include(p => p.District)
+            .Where(p => p.ConsumerId == consumer.ConsumerId)
+            .OrderByDescending(p => p.PurchaseDate)
+            .Select(p => new
             {
-                s.SubId,
-                s.DatasetId,
-                DatasetName = s.Dataset!.Name,
-                s.ProvinceId,
-                ProvinceName = s.Province!.Name,
-                s.SubStart,
-                s.SubEnd,
-                s.RenewalCycle,
-                s.RenewalStatus,
-                s.TotalPrice,
-                s.RequestCount
+                subscriptionId = p.SubscriptionId,
+                provinceName = p.Province != null ? p.Province.Name : "Unknown",
+                districtName = p.District != null ? p.District.Name : "All districts",
+                startDate = p.StartDate,
+                endDate = p.EndDate,
+                billingCycle = p.BillingCycle,
+                monthlyPrice = p.MonthlyPrice,
+                totalPaid = p.TotalPaid,
+                purchaseDate = p.PurchaseDate,
+                status = p.Status,
+                autoRenew = p.AutoRenew,
+                cancelledAt = p.CancelledAt,
+                dashboardAccessCount = p.DashboardAccessCount,
+                lastAccessDate = p.LastAccessDate
             })
             .ToListAsync();
 
         return Ok(subscriptions);
     }
 
-    // GET: api/purchases/my/api
-    [HttpGet("my/api")]
-    public async Task<ActionResult<IEnumerable<object>>> GetMyAPIPackages()
+    /// <summary>
+    /// Get my API packages
+    /// </summary>
+    [HttpGet("my-api-packages")]
+    public async Task<IActionResult> GetMyAPIPackages()
     {
-        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+        if (string.IsNullOrEmpty(userEmail))
+        {
+            return Unauthorized(new { message = "User email not found" });
+        }
 
-        var consumer = await _context.DataConsumers.FirstOrDefaultAsync(c => c.UserId == userId);
+        var consumer = await _context.DataConsumers
+            .Include(c => c.User)
+            .FirstOrDefaultAsync(c => c.User.Email == userEmail);
+
         if (consumer == null)
         {
             return NotFound(new { message = "Consumer profile not found" });
         }
 
-        var apiPackages = await _context.APIPackages
-            .Include(a => a.Dataset)
-            .Where(a => a.ConsumerId == consumer.ConsumerId)
-            .OrderByDescending(a => a.PurchaseDate)
-            .Select(a => new
+        var apiPackages = await _context.APIPackagePurchases
+            .Include(p => p.Province)
+            .Include(p => p.District)
+            .Include(p => p.APIKeys)
+            .Where(p => p.ConsumerId == consumer.ConsumerId)
+            .OrderByDescending(p => p.PurchaseDate)
+            .Select(p => new
             {
-                a.ApiId,
-                a.DatasetId,
-                DatasetName = a.Dataset!.Name,
-                a.ApiKey,
-                a.ApiCallsPurchased,
-                a.ApiCallsUsed,
-                RemainingCalls = a.ApiCallsPurchased - a.ApiCallsUsed,
-                a.PurchaseDate,
-                a.ExpiryDate,
-                a.TotalPaid,
-                a.Status
+                apiPurchaseId = p.ApiPurchaseId,
+                provinceName = p.Province != null ? p.Province.Name : "Nationwide",
+                districtName = p.District != null ? p.District.Name : null,
+                apiCallsPurchased = p.ApiCallsPurchased,
+                apiCallsUsed = p.ApiCallsUsed,
+                remainingCalls = p.ApiCallsPurchased - p.ApiCallsUsed,
+                pricePerCall = p.PricePerCall,
+                totalPaid = p.TotalPaid,
+                purchaseDate = p.PurchaseDate,
+                expiryDate = p.ExpiryDate,
+                status = p.Status,
+                apiKeys = p.APIKeys.Select(k => new
+                {
+                    keyId = k.KeyId,
+                    keyValue = k.KeyValue,
+                    keyName = k.KeyName,
+                    isActive = k.IsActive,
+                    createdAt = k.CreatedAt,
+                    lastUsedAt = k.LastUsedAt,
+                    revokedAt = k.RevokedAt
+                }).ToList()
             })
             .ToListAsync();
 

@@ -101,19 +101,19 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// Seed database
+// Seed database - auto-migration and seeding enabled
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<EVDataMarketplaceDbContext>();
     try
     {
-        context.Database.Migrate(); // Auto apply migrations
-        DbSeeder.SeedData(context);
+        context.Database.Migrate(); // Apply migrations automatically
+        DbSeeder.SeedData(context); // Seed data automatically
     }
     catch (Exception ex)
     {
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred while seeding the database.");
+        logger.LogError(ex, "An error occurred while migrating or seeding the database.");
     }
 }
 

@@ -10,30 +10,41 @@ using EVDataMarketplace.API.Services;
 
 namespace EVDataMarketplace.API.Controllers;
 
-// B6: Data Consumer thanh toan va su dung
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "DataConsumer")]
 public class PaymentsController : ControllerBase
 {
     private readonly EVDataMarketplaceDbContext _context;
     private readonly IPayOSService _payOSService;
     private readonly ILogger<PaymentsController> _logger;
 
-    public PaymentsController(EVDataMarketplaceDbContext context, IPayOSService payOSService, ILogger<PaymentsController> logger)
+    public PaymentsController(
+        EVDataMarketplaceDbContext context,
+        IPayOSService payOSService,
+        ILogger<PaymentsController> logger)
     {
         _context = context;
         _payOSService = payOSService;
         _logger = logger;
     }
 
-    // POST: api/payments/create - Tao payment va checkout URL
+    /// <summary>
+    /// Create payment for any package type
+    /// </summary>
     [HttpPost("create")]
+    [Authorize(Roles = "DataConsumer")]
     public async Task<ActionResult<PaymentResponseDto>> CreatePayment([FromBody] PaymentCreateDto request)
     {
-        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+        if (string.IsNullOrEmpty(userEmail))
+        {
+            return Unauthorized(new { message = "User email not found" });
+        }
 
-        var consumer = await _context.DataConsumers.FirstOrDefaultAsync(c => c.UserId == userId);
+        var consumer = await _context.DataConsumers
+            .Include(c => c.User)
+            .FirstOrDefaultAsync(c => c.User.Email == userEmail);
+
         if (consumer == null)
         {
             return NotFound(new { message = "Consumer profile not found" });
@@ -42,55 +53,68 @@ public class PaymentsController : ControllerBase
         decimal amount = 0;
         string description = "";
 
-        // Lay thong tin goi da mua
-        if (request.PaymentType == "OneTimePurchase")
+        // Get purchase details based on type
+        switch (request.PaymentType)
         {
-            var purchase = await _context.OneTimePurchases
-                .Include(p => p.Dataset)
-                .FirstOrDefaultAsync(p => p.OtpId == request.ReferenceId && p.ConsumerId == consumer.ConsumerId);
+            case "DataPackage":
+                var dataPackage = await _context.DataPackagePurchases
+                    .FirstOrDefaultAsync(p => p.PurchaseId == request.ReferenceId && p.ConsumerId == consumer.ConsumerId);
 
-            if (purchase == null)
-            {
-                return NotFound(new { message = "Purchase not found" });
-            }
+                if (dataPackage == null)
+                {
+                    return NotFound(new { message = "Data package not found" });
+                }
 
-            amount = purchase.TotalPrice ?? 0;
-            description = "Mua du lieu 1 lan"; // Max 25 chars for PayOS
+                if (dataPackage.Status == "Active")
+                {
+                    return BadRequest(new { message = "Data package already paid" });
+                }
+
+                amount = dataPackage.TotalPrice;
+                description = "Data Package Purchase";
+                break;
+
+            case "SubscriptionPackage":
+                var subscription = await _context.SubscriptionPackagePurchases
+                    .FirstOrDefaultAsync(s => s.SubscriptionId == request.ReferenceId && s.ConsumerId == consumer.ConsumerId);
+
+                if (subscription == null)
+                {
+                    return NotFound(new { message = "Subscription not found" });
+                }
+
+                if (subscription.Status == "Active")
+                {
+                    return BadRequest(new { message = "Subscription already paid" });
+                }
+
+                amount = subscription.TotalPaid;
+                description = "Subscription Package";
+                break;
+
+            case "APIPackage":
+                var apiPackage = await _context.APIPackagePurchases
+                    .FirstOrDefaultAsync(a => a.ApiPurchaseId == request.ReferenceId && a.ConsumerId == consumer.ConsumerId);
+
+                if (apiPackage == null)
+                {
+                    return NotFound(new { message = "API package not found" });
+                }
+
+                if (apiPackage.Status == "Active")
+                {
+                    return BadRequest(new { message = "API package already paid" });
+                }
+
+                amount = apiPackage.TotalPaid;
+                description = "API Package Purchase";
+                break;
+
+            default:
+                return BadRequest(new { message = "Invalid payment type. Must be DataPackage, SubscriptionPackage, or APIPackage" });
         }
-        else if (request.PaymentType == "Subscription")
-        {
-            var subscription = await _context.Subscriptions
-                .Include(s => s.Dataset)
-                .FirstOrDefaultAsync(s => s.SubId == request.ReferenceId && s.ConsumerId == consumer.ConsumerId);
 
-            if (subscription == null)
-            {
-                return NotFound(new { message = "Subscription not found" });
-            }
-
-            amount = subscription.TotalPrice ?? 0;
-            description = "Dang ky thue bao"; // Max 25 chars for PayOS
-        }
-        else if (request.PaymentType == "APIPackage")
-        {
-            var apiPackage = await _context.APIPackages
-                .Include(a => a.Dataset)
-                .FirstOrDefaultAsync(a => a.ApiId == request.ReferenceId && a.ConsumerId == consumer.ConsumerId);
-
-            if (apiPackage == null)
-            {
-                return NotFound(new { message = "API Package not found" });
-            }
-
-            amount = apiPackage.TotalPaid ?? 0;
-            description = "Mua goi API"; // Max 25 chars for PayOS
-        }
-        else
-        {
-            return BadRequest(new { message = "Invalid payment type" });
-        }
-
-        // Tao payment record
+        // Create payment record
         var payment = new Payment
         {
             ConsumerId = consumer.ConsumerId,
@@ -99,173 +123,53 @@ public class PaymentsController : ControllerBase
             PaymentMethod = "PayOS",
             PaymentType = request.PaymentType,
             ReferenceId = request.ReferenceId,
-            Status = "Pending",
-            PayosOrderId = Guid.NewGuid().ToString("N")
+            Status = "Pending"
         };
 
         _context.Payments.Add(payment);
         await _context.SaveChangesAsync();
 
-        // Tao payment link voi PayOS
-        var paymentResult = await _payOSService.CreatePaymentLinkAsync(payment.PaymentId, amount, description);
-
-        // Luu OrderCode vao TransactionRef de tim payment trong webhook
-        payment.TransactionRef = paymentResult.OrderCode.ToString();
-        await _context.SaveChangesAsync();
-
-        _logger.LogInformation("Created payment {PaymentId} with OrderCode {OrderCode}", payment.PaymentId, paymentResult.OrderCode);
-
-        return Ok(new PaymentResponseDto
-        {
-            PaymentId = payment.PaymentId,
-            PayosOrderId = paymentResult.OrderCode.ToString(),
-            CheckoutUrl = paymentResult.CheckoutUrl,
-            QrCode = paymentResult.QrCode,
-            Amount = amount,
-            Status = payment.Status
-        });
-    }
-
-    // GET: api/payments/callback - PayOS return URL callback
-    [AllowAnonymous]
-    [HttpGet("callback")]
-    public async Task<IActionResult> PaymentCallback([FromQuery] string? orderCode, [FromQuery] string? status)
-    {
         try
         {
-            _logger.LogInformation("Payment callback received - OrderCode: {OrderCode}, Status: {Status}", orderCode, status);
+            // Create PayOS checkout
+            var paymentResult = await _payOSService.CreatePaymentLinkAsync(
+                payment.PaymentId,
+                amount,
+                description
+            );
 
-            if (string.IsNullOrEmpty(orderCode))
+            // Store transaction reference
+            payment.TransactionRef = paymentResult.OrderCode.ToString();
+            payment.PayosOrderId = paymentResult.OrderCode.ToString();
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Payment {PaymentId} created for {Type} - Amount: {Amount}",
+                payment.PaymentId, request.PaymentType, amount);
+
+            return Ok(new PaymentResponseDto
             {
-                return BadRequest(new { message = "OrderCode is required" });
-            }
-
-            // Find payment by order code
-            var payment = await _context.Payments
-                .FirstOrDefaultAsync(p => p.TransactionRef == orderCode);
-
-            if (payment == null)
-            {
-                _logger.LogWarning("Payment not found for OrderCode: {OrderCode}", orderCode);
-                return Redirect($"http://localhost:5173/payment/failed?message=Payment not found");
-            }
-
-            // Get payment status from PayOS và update database
-            var paymentStatus = await _payOSService.GetPaymentStatusAsync(orderCode);
-
-            // Update payment status in database if completed
-            if (paymentStatus.Status == "Completed" && payment.Status != "Completed")
-            {
-                payment.Status = "Completed";
-                payment.PaymentDate = DateTime.Now;
-                
-                await UpdatePurchaseStatus(payment);
-                await CreateRevenueShare(payment);
-                await _context.SaveChangesAsync();
-                
-                _logger.LogInformation("Payment {PaymentId} updated to Completed via callback", payment.PaymentId);
-            }
-
-            if (paymentStatus.Status == "Completed")
-            {
-                return Redirect($"http://localhost:5173/payment/success?orderId={orderCode}&paymentId={payment.PaymentId}");
-            }
-            else if (paymentStatus.Status == "Failed")
-            {
-                return Redirect($"http://localhost:5173/payment/failed?orderId={orderCode}");
-            }
-            else
-            {
-                return Redirect($"http://localhost:5173/payment/pending?orderId={orderCode}");
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error processing payment callback");
-            return Redirect($"http://localhost:5173/payment/failed?message=Error processing callback");
-        }
-    }
-
-    // GET: api/payments/{id}/check-status - Manual check and update payment status
-    [HttpGet("{id}/check-status")]
-    public async Task<ActionResult<object>> CheckPaymentStatus(int id)
-    {
-        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
-
-        var consumer = await _context.DataConsumers.FirstOrDefaultAsync(c => c.UserId == userId);
-        if (consumer == null)
-        {
-            return NotFound(new { message = "Consumer profile not found" });
-        }
-
-        var payment = await _context.Payments
-            .FirstOrDefaultAsync(p => p.PaymentId == id && p.ConsumerId == consumer.ConsumerId);
-
-        if (payment == null)
-        {
-            return NotFound(new { message = "Payment not found" });
-        }
-
-        if (string.IsNullOrEmpty(payment.TransactionRef))
-        {
-            return BadRequest(new { message = "Payment has no transaction reference" });
-        }
-
-        try
-        {
-            // Get status from PayOS
-            var paymentStatus = await _payOSService.GetPaymentStatusAsync(payment.TransactionRef);
-            
-            _logger.LogInformation("Checked PayOS status for Payment {PaymentId}: {Status}", payment.PaymentId, paymentStatus.Status);
-
-            // Update if status changed to Completed
-            if (paymentStatus.Status == "Completed" && payment.Status != "Completed")
-            {
-                payment.Status = "Completed";
-                payment.PaymentDate = DateTime.Now;
-                
-                await UpdatePurchaseStatus(payment);
-                await CreateRevenueShare(payment);
-                await _context.SaveChangesAsync();
-                
-                _logger.LogInformation("Payment {PaymentId} updated to Completed via manual check", payment.PaymentId);
-                
-                return Ok(new { 
-                    message = "Payment status updated successfully",
-                    paymentId = payment.PaymentId,
-                    oldStatus = "Pending",
-                    newStatus = "Completed",
-                    paymentDate = payment.PaymentDate
-                });
-            }
-            else if (paymentStatus.Status == "Failed" && payment.Status != "Failed")
-            {
-                payment.Status = "Failed";
-                await _context.SaveChangesAsync();
-                
-                return Ok(new { 
-                    message = "Payment marked as failed",
-                    paymentId = payment.PaymentId,
-                    status = "Failed"
-                });
-            }
-            
-            return Ok(new { 
-                message = "Payment status checked",
-                paymentId = payment.PaymentId,
-                currentStatus = payment.Status,
-                payOSStatus = paymentStatus.Status,
-                noUpdateNeeded = payment.Status == paymentStatus.Status
+                PaymentId = payment.PaymentId,
+                CheckoutUrl = paymentResult.CheckoutUrl,
+                Amount = amount,
+                Status = payment.Status
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking payment status from PayOS");
-            return StatusCode(500, new { message = "Error checking payment status", error = ex.Message });
+            _logger.LogError(ex, "Error creating PayOS payment link");
+
+            // Delete payment if PayOS fails
+            _context.Payments.Remove(payment);
+            await _context.SaveChangesAsync();
+
+            return StatusCode(500, new { message = "Error creating payment link", error = ex.Message });
         }
     }
 
-    // POST: api/payments/webhook - PayOS webhook callback
+    /// <summary>
+    /// PayOS webhook callback
+    /// </summary>
     [AllowAnonymous]
     [HttpPost("webhook")]
     public async Task<IActionResult> PaymentWebhook([FromBody] JsonElement webhookData)
@@ -274,116 +178,150 @@ public class PaymentsController : ControllerBase
         {
             _logger.LogInformation("Received PayOS webhook: {Data}", webhookData.GetRawText());
 
-            // Parse webhook data theo format PayOS
-            // Format: { "data": { "orderCode": long, "amount": int, "description": string, "status": string, ... } }
             if (!webhookData.TryGetProperty("data", out var data))
             {
                 _logger.LogWarning("Webhook missing 'data' property");
-                return BadRequest(new { message = "Invalid webhook data format" });
+                return BadRequest(new { message = "Invalid webhook format" });
             }
 
             var orderCode = data.TryGetProperty("orderCode", out var orderCodeProp)
                 ? orderCodeProp.GetInt64().ToString() : null;
             var status = data.TryGetProperty("status", out var statusProp)
                 ? statusProp.GetString() : null;
-            var amount = data.TryGetProperty("amount", out var amountProp)
-                ? amountProp.GetDecimal() : 0;
 
             if (string.IsNullOrEmpty(orderCode) || string.IsNullOrEmpty(status))
             {
                 _logger.LogWarning("Webhook missing required fields");
-                return BadRequest(new { message = "Missing required webhook fields" });
+                return BadRequest(new { message = "Missing required fields" });
             }
 
-            _logger.LogInformation("Processing webhook - OrderCode: {OrderCode}, Status: {Status}, Amount: {Amount}", 
-                orderCode, status, amount);
+            _logger.LogInformation("Processing webhook - OrderCode: {OrderCode}, Status: {Status}",
+                orderCode, status);
 
-            // Find payment by order code (stored in TransactionRef)
+            // Find payment
             var payment = await _context.Payments
                 .FirstOrDefaultAsync(p => p.TransactionRef == orderCode);
 
             if (payment == null)
             {
                 _logger.LogWarning("Payment not found for OrderCode: {OrderCode}", orderCode);
-                // Return 200 OK to prevent PayOS retrying
                 return Ok(new { message = "Payment not found but acknowledged" });
             }
 
-            // Update payment status based on PayOS status
+            // Process based on status
             if (status.ToUpper() == "PAID" && payment.Status != "Completed")
             {
                 payment.Status = "Completed";
                 payment.PaymentDate = DateTime.Now;
 
-                // Update purchase/subscription status
                 await UpdatePurchaseStatus(payment);
-
-                // Auto-create revenue share
                 await CreateRevenueShare(payment);
 
                 await _context.SaveChangesAsync();
-                _logger.LogInformation("Payment {PaymentId} marked as Completed via webhook", payment.PaymentId);
+                _logger.LogInformation("Payment {PaymentId} completed via webhook", payment.PaymentId);
             }
             else if (status.ToUpper() == "CANCELLED" && payment.Status != "Failed")
             {
                 payment.Status = "Failed";
                 await _context.SaveChangesAsync();
-                _logger.LogInformation("Payment {PaymentId} marked as Failed via webhook", payment.PaymentId);
+                _logger.LogInformation("Payment {PaymentId} failed via webhook", payment.PaymentId);
             }
 
-            return Ok(new { 
-                message = "Webhook processed successfully", 
-                paymentId = payment.PaymentId,
-                status = payment.Status 
-            });
+            return Ok(new { message = "Webhook processed", paymentId = payment.PaymentId });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing PayOS webhook");
-            // Return 200 OK to prevent PayOS retrying
-            return Ok(new { message = "Webhook received but error occurred", error = ex.Message });
+            _logger.LogError(ex, "Error processing webhook");
+            return Ok(new { message = "Webhook received but error occurred" });
         }
     }
 
-    // Helper method: Update purchase/subscription status
-    private async Task UpdatePurchaseStatus(Payment payment)
+    /// <summary>
+    /// PayOS callback after payment (browser redirect)
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("callback")]
+    public async Task<IActionResult> PaymentCallback(
+        [FromQuery] string code,
+        [FromQuery] string id,
+        [FromQuery] bool cancel,
+        [FromQuery] string status,
+        [FromQuery] long orderCode)
     {
-        if (payment.PaymentType == "OneTimePurchase")
+        try
         {
-            var purchase = await _context.OneTimePurchases.FindAsync(payment.ReferenceId);
-            if (purchase != null)
+            _logger.LogInformation("Received PayOS callback - Code: {Code}, Status: {Status}, OrderCode: {OrderCode}",
+                code, status, orderCode);
+
+            // Find payment by orderCode
+            var payment = await _context.Payments
+                .FirstOrDefaultAsync(p => p.TransactionRef == orderCode.ToString());
+
+            if (payment == null)
             {
-                purchase.Status = "Completed";
+                _logger.LogWarning("Payment not found for OrderCode: {OrderCode}", orderCode);
+                return Redirect($"http://localhost:5173/payment-failed?error=payment_not_found");
             }
+
+            // Process based on code and status
+            if (code == "00" && status.ToUpper() == "PAID" && payment.Status != "Completed")
+            {
+                payment.Status = "Completed";
+                payment.PaymentDate = DateTime.Now;
+
+                await UpdatePurchaseStatus(payment);
+                await CreateRevenueShare(payment);
+
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Payment {PaymentId} completed via callback", payment.PaymentId);
+
+                // Redirect to frontend success page
+                return Redirect($"http://localhost:5173/payment-success?paymentId={payment.PaymentId}&type={payment.PaymentType}&referenceId={payment.ReferenceId}");
+            }
+            else if (cancel || code != "00")
+            {
+                if (payment.Status != "Failed")
+                {
+                    payment.Status = "Failed";
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation("Payment {PaymentId} failed/cancelled via callback", payment.PaymentId);
+                }
+
+                // Redirect to frontend failure page
+                return Redirect($"http://localhost:5173/payment-failed?paymentId={payment.PaymentId}&code={code}");
+            }
+
+            // Already processed
+            _logger.LogInformation("Payment {PaymentId} already processed, status: {Status}", payment.PaymentId, payment.Status);
+            return Redirect($"http://localhost:5173/payment-success?paymentId={payment.PaymentId}&type={payment.PaymentType}&referenceId={payment.ReferenceId}");
         }
-        else if (payment.PaymentType == "Subscription")
+        catch (Exception ex)
         {
-            var subscription = await _context.Subscriptions.FindAsync(payment.ReferenceId);
-            if (subscription != null)
-            {
-                subscription.RenewalStatus = "Active";
-            }
-        }
-        else if (payment.PaymentType == "APIPackage")
-        {
-            var apiPackage = await _context.APIPackages.FindAsync(payment.ReferenceId);
-            if (apiPackage != null)
-            {
-                apiPackage.Status = "Active";
-            }
+            _logger.LogError(ex, "Error processing callback");
+            return Redirect($"http://localhost:5173/payment-failed?error=processing_error");
         }
     }
 
-    // POST: api/payments/{id}/complete - Manual complete payment (for testing)
-    [HttpPost("{id}/complete")]
-    public async Task<IActionResult> CompletePayment(int id)
+    /// <summary>
+    /// Get payment status
+    /// </summary>
+    [HttpGet("{id}/status")]
+    [Authorize(Roles = "DataConsumer")]
+    public async Task<IActionResult> GetPaymentStatus(int id)
     {
-        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+        if (string.IsNullOrEmpty(userEmail))
+        {
+            return Unauthorized(new { message = "User email not found" });
+        }
 
-        var consumer = await _context.DataConsumers.FirstOrDefaultAsync(c => c.UserId == userId);
+        var consumer = await _context.DataConsumers
+            .Include(c => c.User)
+            .FirstOrDefaultAsync(c => c.User.Email == userEmail);
+
         if (consumer == null)
         {
-            return NotFound(new { message = "Consumer profile not found" });
+            return NotFound(new { message = "Consumer not found" });
         }
 
         var payment = await _context.Payments
@@ -394,152 +332,237 @@ public class PaymentsController : ControllerBase
             return NotFound(new { message = "Payment not found" });
         }
 
-        if (payment.Status == "Completed")
+        return Ok(new
         {
-            return BadRequest(new { message = "Payment already completed" });
+            paymentId = payment.PaymentId,
+            amount = payment.Amount,
+            status = payment.Status,
+            paymentType = payment.PaymentType,
+            referenceId = payment.ReferenceId,
+            paymentDate = payment.PaymentDate,
+            transactionRef = payment.TransactionRef
+        });
+    }
+
+    // Helper: Update purchase status after payment
+    private async Task UpdatePurchaseStatus(Payment payment)
+    {
+        switch (payment.PaymentType)
+        {
+            case "DataPackage":
+                var dataPackage = await _context.DataPackagePurchases
+                    .FirstOrDefaultAsync(p => p.PurchaseId == payment.ReferenceId);
+                if (dataPackage != null)
+                {
+                    dataPackage.Status = "Active";
+                }
+                break;
+
+            case "SubscriptionPackage":
+                var subscription = await _context.SubscriptionPackagePurchases
+                    .FirstOrDefaultAsync(s => s.SubscriptionId == payment.ReferenceId);
+                if (subscription != null)
+                {
+                    subscription.Status = "Active";
+                }
+                break;
+
+            case "APIPackage":
+                var apiPackage = await _context.APIPackagePurchases
+                    .FirstOrDefaultAsync(a => a.ApiPurchaseId == payment.ReferenceId);
+                if (apiPackage != null)
+                {
+                    apiPackage.Status = "Active";
+                }
+                break;
+        }
+    }
+
+    // Helper: Create revenue share after payment
+    private async Task CreateRevenueShare(Payment payment)
+    {
+        var pricing = await _context.SystemPricings
+            .FirstOrDefaultAsync(p => p.PackageType == payment.PaymentType && p.IsActive);
+
+        if (pricing == null)
+        {
+            _logger.LogWarning("No pricing found for {PaymentType}", payment.PaymentType);
+            return;
         }
 
-        // Update payment status
-        payment.Status = "Completed";
-        payment.TransactionRef = Guid.NewGuid().ToString("N");
-
-        // Update purchase status
-        if (payment.PaymentType == "OneTimePurchase")
+        if (payment.PaymentType == "DataPackage")
         {
-            var purchase = await _context.OneTimePurchases.FindAsync(payment.ReferenceId);
-            if (purchase != null)
-            {
-                purchase.Status = "Completed";
-            }
+            await CreateDataPackageRevenueShare(payment, pricing);
         }
-        else if (payment.PaymentType == "Subscription")
+        else if (payment.PaymentType == "SubscriptionPackage")
         {
-            var subscription = await _context.Subscriptions.FindAsync(payment.ReferenceId);
-            if (subscription != null)
-            {
-                subscription.RenewalStatus = "Active";
-            }
+            await CreateSubscriptionRevenueShare(payment, pricing);
         }
         else if (payment.PaymentType == "APIPackage")
         {
-            var apiPackage = await _context.APIPackages.FindAsync(payment.ReferenceId);
-            if (apiPackage != null)
-            {
-                apiPackage.Status = "Active";
-            }
+            await CreateAPIPackageRevenueShare(payment, pricing);
         }
-
-        // Tao revenue share record
-        await CreateRevenueShare(payment);
-
-        await _context.SaveChangesAsync();
-
-        return Ok(new { message = "Payment completed successfully" });
     }
 
-    // GET: api/payments/my
-    [HttpGet("my")]
-    public async Task<ActionResult<IEnumerable<object>>> GetMyPayments()
+    // Revenue share for Data Package (split by provider row count)
+    private async Task CreateDataPackageRevenueShare(Payment payment, SystemPricing pricing)
     {
-        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        var purchase = await _context.DataPackagePurchases
+            .FirstOrDefaultAsync(p => p.PurchaseId == payment.ReferenceId);
 
-        var consumer = await _context.DataConsumers.FirstOrDefaultAsync(c => c.UserId == userId);
-        if (consumer == null)
+        if (purchase == null) return;
+
+        // Query records to get provider distribution
+        var query = _context.DatasetRecords
+            .Include(r => r.Dataset)
+            .ThenInclude(d => d!.DataProvider)
+            .Where(r => r.ProvinceId == purchase.ProvinceId)
+            .Where(r => r.Dataset!.ModerationStatus == "Approved");
+
+        if (purchase.DistrictId.HasValue)
         {
-            return NotFound(new { message = "Consumer profile not found" });
+            query = query.Where(r => r.DistrictId == purchase.DistrictId.Value);
         }
 
-        var payments = await _context.Payments
-            .Where(p => p.ConsumerId == consumer.ConsumerId)
-            .OrderByDescending(p => p.PaymentDate)
-            .Select(p => new
+        if (purchase.StartDate.HasValue)
+        {
+            query = query.Where(r => r.ChargingTimestamp >= purchase.StartDate.Value);
+        }
+
+        if (purchase.EndDate.HasValue)
+        {
+            query = query.Where(r => r.ChargingTimestamp <= purchase.EndDate.Value);
+        }
+
+        var providerDistribution = await query
+            .GroupBy(r => r.Dataset!.ProviderId)
+            .Select(g => new
             {
-                p.PaymentId,
-                p.Amount,
-                p.PaymentDate,
-                p.PaymentMethod,
-                p.PaymentType,
-                p.ReferenceId,
-                p.Status,
-                p.TransactionRef
+                ProviderId = g.Key,
+                RowCount = g.Count()
             })
             .ToListAsync();
 
-        return Ok(payments);
+        var totalRows = providerDistribution.Sum(p => p.RowCount);
+
+        foreach (var provider in providerDistribution)
+        {
+            var percentage = (decimal)provider.RowCount / totalRows;
+            var providerAmount = payment.Amount!.Value * percentage * (pricing.ProviderCommissionPercent / 100);
+            var adminAmount = payment.Amount.Value * percentage * (pricing.AdminCommissionPercent / 100);
+
+            var revenueShare = new RevenueShare
+            {
+                PaymentId = payment.PaymentId,
+                ProviderId = provider.ProviderId,
+                TotalAmount = payment.Amount.Value * percentage,
+                ProviderShare = providerAmount,
+                AdminShare = adminAmount,
+                CalculatedDate = DateTime.Now,
+                PayoutStatus = "Pending"
+            };
+
+            _context.RevenueShares.Add(revenueShare);
+        }
     }
 
-    // Helper method: Tao revenue share khi payment thanh cong
-    private async Task CreateRevenueShare(Payment payment)
+    // Revenue share for Subscription (equal split among providers)
+    private async Task CreateSubscriptionRevenueShare(Payment payment, SystemPricing pricing)
     {
-        int? datasetId = null;
-        int? providerId = null;
+        var subscription = await _context.SubscriptionPackagePurchases
+            .FirstOrDefaultAsync(s => s.SubscriptionId == payment.ReferenceId);
 
-        // Lay dataset va provider info
-        if (payment.PaymentType == "OneTimePurchase")
+        if (subscription == null) return;
+
+        // Get distinct providers in the region
+        var query = _context.DatasetRecords
+            .Include(r => r.Dataset)
+            .Where(r => r.ProvinceId == subscription.ProvinceId)
+            .Where(r => r.Dataset!.ModerationStatus == "Approved");
+
+        if (subscription.DistrictId.HasValue)
         {
-            var purchase = await _context.OneTimePurchases
-                .Include(p => p.Dataset)
-                    .ThenInclude(d => d!.DataProvider)
-                .FirstOrDefaultAsync(p => p.OtpId == payment.ReferenceId);
-
-            datasetId = purchase?.DatasetId;
-            providerId = purchase?.Dataset?.ProviderId;
-        }
-        else if (payment.PaymentType == "Subscription")
-        {
-            var subscription = await _context.Subscriptions
-                .Include(s => s.Dataset)
-                    .ThenInclude(d => d!.DataProvider)
-                .FirstOrDefaultAsync(s => s.SubId == payment.ReferenceId);
-
-            datasetId = subscription?.DatasetId;
-            providerId = subscription?.Dataset?.ProviderId;
-        }
-        else if (payment.PaymentType == "APIPackage")
-        {
-            var apiPackage = await _context.APIPackages
-                .Include(a => a.Dataset)
-                    .ThenInclude(d => d!.DataProvider)
-                .FirstOrDefaultAsync(a => a.ApiId == payment.ReferenceId);
-
-            datasetId = apiPackage?.DatasetId;
-            providerId = apiPackage?.Dataset?.ProviderId;
+            query = query.Where(r => r.DistrictId == subscription.DistrictId.Value);
         }
 
-        if (!datasetId.HasValue || !providerId.HasValue)
+        var providers = await query
+            .Select(r => r.Dataset!.ProviderId)
+            .Distinct()
+            .ToListAsync();
+
+        if (providers.Any())
         {
-            return;
+            var sharePerProvider = payment.Amount!.Value / providers.Count;
+            var providerAmount = sharePerProvider * (pricing.ProviderCommissionPercent / 100);
+            var adminAmount = sharePerProvider * (pricing.AdminCommissionPercent / 100);
+
+            foreach (var providerId in providers)
+            {
+                var revenueShare = new RevenueShare
+                {
+                    PaymentId = payment.PaymentId,
+                    ProviderId = providerId,
+                    TotalAmount = sharePerProvider,
+                    ProviderShare = providerAmount,
+                    AdminShare = adminAmount,
+                    CalculatedDate = DateTime.Now,
+                    PayoutStatus = "Pending"
+                };
+
+                _context.RevenueShares.Add(revenueShare);
+            }
+        }
+    }
+
+    // Revenue share for API Package (equal split among providers)
+    private async Task CreateAPIPackageRevenueShare(Payment payment, SystemPricing pricing)
+    {
+        var apiPackage = await _context.APIPackagePurchases
+            .FirstOrDefaultAsync(a => a.ApiPurchaseId == payment.ReferenceId);
+
+        if (apiPackage == null) return;
+
+        // Get providers in scope
+        var query = _context.DatasetRecords
+            .Include(r => r.Dataset)
+            .Where(r => r.Dataset!.ModerationStatus == "Approved");
+
+        if (apiPackage.ProvinceId.HasValue)
+        {
+            query = query.Where(r => r.ProvinceId == apiPackage.ProvinceId.Value);
         }
 
-        // Lay tier info de tinh commission
-        var dataset = await _context.Datasets
-            .Include(d => d.PricingTier)
-            .FirstOrDefaultAsync(d => d.DatasetId == datasetId);
-
-        if (dataset?.PricingTier == null)
+        if (apiPackage.DistrictId.HasValue)
         {
-            return;
+            query = query.Where(r => r.DistrictId == apiPackage.DistrictId.Value);
         }
 
-        var totalAmount = payment.Amount ?? 0;
-        var providerPercent = dataset.PricingTier.ProviderCommissionPercent ?? 70m;
-        var adminPercent = dataset.PricingTier.AdminCommissionPercent ?? 30m;
+        var providers = await query
+            .Select(r => r.Dataset!.ProviderId)
+            .Distinct()
+            .ToListAsync();
 
-        var providerShare = totalAmount * (providerPercent / 100m);
-        var adminShare = totalAmount * (adminPercent / 100m);
-
-        var revenueShare = new RevenueShare
+        if (providers.Any())
         {
-            PaymentId = payment.PaymentId,
-            ProviderId = providerId,
-            DatasetId = datasetId,
-            TotalAmount = totalAmount,
-            ProviderShare = providerShare,
-            AdminShare = adminShare,
-            CalculatedDate = DateTime.Now,
-            PayoutStatus = "Pending"
-        };
+            var sharePerProvider = payment.Amount!.Value / providers.Count;
+            var providerAmount = sharePerProvider * (pricing.ProviderCommissionPercent / 100);
+            var adminAmount = sharePerProvider * (pricing.AdminCommissionPercent / 100);
 
-        _context.RevenueShares.Add(revenueShare);
+            foreach (var providerId in providers)
+            {
+                var revenueShare = new RevenueShare
+                {
+                    PaymentId = payment.PaymentId,
+                    ProviderId = providerId,
+                    TotalAmount = sharePerProvider,
+                    ProviderShare = providerAmount,
+                    AdminShare = adminAmount,
+                    CalculatedDate = DateTime.Now,
+                    PayoutStatus = "Pending"
+                };
+
+                _context.RevenueShares.Add(revenueShare);
+            }
+        }
     }
 }

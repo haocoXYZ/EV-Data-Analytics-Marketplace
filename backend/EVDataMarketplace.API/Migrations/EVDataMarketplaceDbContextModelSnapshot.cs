@@ -22,6 +22,75 @@ namespace EVDataMarketplace.API.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("EVDataMarketplace.API.Models.APIKey", b =>
+                {
+                    b.Property<int>("KeyId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("key_id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("KeyId"));
+
+                    b.Property<int>("ApiPurchaseId")
+                        .HasColumnType("int")
+                        .HasColumnName("api_purchase_id");
+
+                    b.Property<int>("ConsumerId")
+                        .HasColumnType("int")
+                        .HasColumnName("consumer_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("KeyName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("key_name");
+
+                    b.Property<string>("KeyValue")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("key_value");
+
+                    b.Property<DateTime?>("LastRequestDate")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("last_request_date");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("last_used_at");
+
+                    b.Property<int>("RequestsToday")
+                        .HasColumnType("int")
+                        .HasColumnName("requests_today");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<string>("RevokedReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("revoked_reason");
+
+                    b.HasKey("KeyId");
+
+                    b.HasIndex("ApiPurchaseId");
+
+                    b.HasIndex("ConsumerId");
+
+                    b.HasIndex("KeyValue")
+                        .IsUnique();
+
+                    b.ToTable("APIKey");
+                });
+
             modelBuilder.Entity("EVDataMarketplace.API.Models.APIPackage", b =>
                 {
                     b.Property<int>("ApiId")
@@ -57,7 +126,6 @@ namespace EVDataMarketplace.API.Migrations
                         .HasColumnName("expiry_date");
 
                     b.Property<decimal?>("PricePerCall")
-                        .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)")
                         .HasColumnName("price_per_call");
 
@@ -71,7 +139,6 @@ namespace EVDataMarketplace.API.Migrations
                         .HasColumnName("status");
 
                     b.Property<decimal?>("TotalPaid")
-                        .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)")
                         .HasColumnName("total_paid");
 
@@ -86,6 +153,70 @@ namespace EVDataMarketplace.API.Migrations
                     b.HasIndex("DatasetId");
 
                     b.ToTable("APIPackage");
+                });
+
+            modelBuilder.Entity("EVDataMarketplace.API.Models.APIPackagePurchase", b =>
+                {
+                    b.Property<int>("ApiPurchaseId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("api_purchase_id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ApiPurchaseId"));
+
+                    b.Property<int>("ApiCallsPurchased")
+                        .HasColumnType("int")
+                        .HasColumnName("api_calls_purchased");
+
+                    b.Property<int>("ApiCallsUsed")
+                        .HasColumnType("int")
+                        .HasColumnName("api_calls_used");
+
+                    b.Property<int>("ConsumerId")
+                        .HasColumnType("int")
+                        .HasColumnName("consumer_id");
+
+                    b.Property<int?>("DistrictId")
+                        .HasColumnType("int")
+                        .HasColumnName("district_id");
+
+                    b.Property<DateTime?>("ExpiryDate")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("expiry_date");
+
+                    b.Property<decimal>("PricePerCall")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18, 4)")
+                        .HasColumnName("price_per_call");
+
+                    b.Property<int?>("ProvinceId")
+                        .HasColumnType("int")
+                        .HasColumnName("province_id");
+
+                    b.Property<DateTime>("PurchaseDate")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("purchase_date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("status");
+
+                    b.Property<decimal>("TotalPaid")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18, 2)")
+                        .HasColumnName("total_paid");
+
+                    b.HasKey("ApiPurchaseId");
+
+                    b.HasIndex("ConsumerId");
+
+                    b.HasIndex("DistrictId");
+
+                    b.HasIndex("ProvinceId");
+
+                    b.ToTable("APIPackagePurchase");
                 });
 
             modelBuilder.Entity("EVDataMarketplace.API.Models.DataConsumer", b =>
@@ -131,6 +262,82 @@ namespace EVDataMarketplace.API.Migrations
                         .IsUnique();
 
                     b.ToTable("DataConsumer");
+                });
+
+            modelBuilder.Entity("EVDataMarketplace.API.Models.DataPackagePurchase", b =>
+                {
+                    b.Property<int>("PurchaseId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("purchase_id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PurchaseId"));
+
+                    b.Property<int>("ConsumerId")
+                        .HasColumnType("int")
+                        .HasColumnName("consumer_id");
+
+                    b.Property<int?>("DistrictId")
+                        .HasColumnType("int")
+                        .HasColumnName("district_id");
+
+                    b.Property<int>("DownloadCount")
+                        .HasColumnType("int")
+                        .HasColumnName("download_count");
+
+                    b.Property<DateTime?>("EndDate")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("end_date");
+
+                    b.Property<DateTime?>("LastDownloadDate")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("last_download_date");
+
+                    b.Property<int>("MaxDownload")
+                        .HasColumnType("int")
+                        .HasColumnName("max_download");
+
+                    b.Property<decimal>("PricePerRow")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18, 4)")
+                        .HasColumnName("price_per_row");
+
+                    b.Property<int>("ProvinceId")
+                        .HasColumnType("int")
+                        .HasColumnName("province_id");
+
+                    b.Property<DateTime>("PurchaseDate")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("purchase_date");
+
+                    b.Property<int>("RowCount")
+                        .HasColumnType("int")
+                        .HasColumnName("row_count");
+
+                    b.Property<DateTime?>("StartDate")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("start_date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("status");
+
+                    b.Property<decimal>("TotalPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18, 2)")
+                        .HasColumnName("total_price");
+
+                    b.HasKey("PurchaseId");
+
+                    b.HasIndex("ConsumerId");
+
+                    b.HasIndex("DistrictId");
+
+                    b.HasIndex("ProvinceId");
+
+                    b.ToTable("DataPackagePurchase");
                 });
 
             modelBuilder.Entity("EVDataMarketplace.API.Models.DataProvider", b =>
@@ -208,19 +415,9 @@ namespace EVDataMarketplace.API.Migrations
                         .HasColumnType("nvarchar(50)")
                         .HasColumnName("data_format");
 
-                    b.Property<decimal?>("DataSizeMb")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)")
-                        .HasColumnName("data_size_mb");
-
                     b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("description");
-
-                    b.Property<string>("FilePath")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)")
-                        .HasColumnName("file_path");
 
                     b.Property<DateTime?>("LastUpdated")
                         .HasColumnType("datetime2")
@@ -233,6 +430,7 @@ namespace EVDataMarketplace.API.Migrations
                         .HasColumnName("moderation_status");
 
                     b.Property<string>("Name")
+                        .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)")
                         .HasColumnName("name");
@@ -241,20 +439,20 @@ namespace EVDataMarketplace.API.Migrations
                         .HasColumnType("int")
                         .HasColumnName("port_id");
 
-                    b.Property<int?>("ProviderId")
+                    b.Property<int>("ProviderId")
                         .HasColumnType("int")
                         .HasColumnName("provider_id");
+
+                    b.Property<int>("RowCount")
+                        .HasColumnType("int")
+                        .HasColumnName("row_count");
 
                     b.Property<string>("Status")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)")
                         .HasColumnName("status");
 
-                    b.Property<int?>("TierId")
-                        .HasColumnType("int")
-                        .HasColumnName("tier_id");
-
-                    b.Property<DateTime?>("UploadDate")
+                    b.Property<DateTime>("UploadDate")
                         .HasColumnType("datetime2")
                         .HasColumnName("upload_date");
 
@@ -272,8 +470,6 @@ namespace EVDataMarketplace.API.Migrations
                     b.HasIndex("ProviderId");
 
                     b.HasIndex("Status");
-
-                    b.HasIndex("TierId");
 
                     b.ToTable("Dataset");
                 });
@@ -325,24 +521,139 @@ namespace EVDataMarketplace.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("RecordId"));
 
+                    b.Property<decimal?>("BatteryCapacityKwh")
+                        .HasColumnType("decimal(10, 2)")
+                        .HasColumnName("battery_capacity_kwh");
+
+                    b.Property<decimal?>("ChargingCost")
+                        .HasColumnType("decimal(18, 2)")
+                        .HasColumnName("charging_cost");
+
+                    b.Property<DateTime>("ChargingTimestamp")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("charging_timestamp");
+
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal?>("Current")
+                        .HasColumnType("decimal(10, 2)")
+                        .HasColumnName("current");
+
+                    b.Property<string>("DataSource")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("data_source");
 
                     b.Property<int>("DatasetId")
                         .HasColumnType("int");
 
-                    b.Property<string>("RecordData")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("DistrictId")
+                        .HasColumnType("int")
+                        .HasColumnName("district_id");
 
-                    b.Property<int>("RowNumber")
-                        .HasColumnType("int");
+                    b.Property<decimal?>("DurationMinutes")
+                        .HasColumnType("decimal(10, 2)")
+                        .HasColumnName("duration_minutes");
+
+                    b.Property<decimal>("EnergyKwh")
+                        .HasColumnType("decimal(18, 4)")
+                        .HasColumnName("energy_kwh");
+
+                    b.Property<decimal?>("PowerKw")
+                        .HasColumnType("decimal(10, 2)")
+                        .HasColumnName("power_kw");
+
+                    b.Property<int>("ProvinceId")
+                        .HasColumnType("int")
+                        .HasColumnName("province_id");
+
+                    b.Property<decimal?>("SocEnd")
+                        .HasColumnType("decimal(5, 2)")
+                        .HasColumnName("soc_end");
+
+                    b.Property<decimal?>("SocStart")
+                        .HasColumnType("decimal(5, 2)")
+                        .HasColumnName("soc_start");
+
+                    b.Property<string>("StationAddress")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("station_address");
+
+                    b.Property<string>("StationId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("station_id");
+
+                    b.Property<string>("StationName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("station_name");
+
+                    b.Property<string>("StationOperator")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("station_operator");
+
+                    b.Property<string>("VehicleType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("vehicle_type");
+
+                    b.Property<decimal?>("Voltage")
+                        .HasColumnType("decimal(10, 2)")
+                        .HasColumnName("voltage");
 
                     b.HasKey("RecordId");
 
+                    b.HasIndex("ChargingTimestamp");
+
                     b.HasIndex("DatasetId");
 
+                    b.HasIndex("DistrictId");
+
+                    b.HasIndex("ProvinceId", "DistrictId");
+
                     b.ToTable("DatasetRecords");
+                });
+
+            modelBuilder.Entity("EVDataMarketplace.API.Models.District", b =>
+                {
+                    b.Property<int>("DistrictId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("district_id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("DistrictId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("ProvinceId")
+                        .HasColumnType("int")
+                        .HasColumnName("province_id");
+
+                    b.Property<string>("Type")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("type");
+
+                    b.HasKey("DistrictId");
+
+                    b.HasIndex("ProvinceId");
+
+                    b.ToTable("District");
                 });
 
             modelBuilder.Entity("EVDataMarketplace.API.Models.OneTimePurchase", b =>
@@ -393,7 +704,6 @@ namespace EVDataMarketplace.API.Migrations
                         .HasColumnName("status");
 
                     b.Property<decimal?>("TotalPrice")
-                        .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)")
                         .HasColumnName("total_price");
 
@@ -531,67 +841,6 @@ namespace EVDataMarketplace.API.Migrations
                     b.ToTable("Payout");
                 });
 
-            modelBuilder.Entity("EVDataMarketplace.API.Models.PricingTier", b =>
-                {
-                    b.Property<int>("TierId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasColumnName("tier_id");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("TierId"));
-
-                    b.Property<decimal?>("AdminCommissionPercent")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("decimal(5,2)")
-                        .HasColumnName("admin_commission_percent");
-
-                    b.Property<decimal?>("ApiPricePerCall")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)")
-                        .HasColumnName("api_price_per_call");
-
-                    b.Property<decimal?>("BasePricePerMb")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)")
-                        .HasColumnName("base_price_per_mb");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("nvarchar(max)")
-                        .HasColumnName("description");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit")
-                        .HasColumnName("is_active");
-
-                    b.Property<decimal?>("ProviderCommissionPercent")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("decimal(5,2)")
-                        .HasColumnName("provider_commission_percent");
-
-                    b.Property<decimal?>("SubscriptionPricePerRegion")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)")
-                        .HasColumnName("subscription_price_per_region");
-
-                    b.Property<string>("TierName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)")
-                        .HasColumnName("tier_name");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("TierId");
-
-                    b.ToTable("PricingTier");
-                });
-
             modelBuilder.Entity("EVDataMarketplace.API.Models.Province", b =>
                 {
                     b.Property<int>("ProvinceId")
@@ -601,7 +850,13 @@ namespace EVDataMarketplace.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ProvinceId"));
 
+                    b.Property<string>("Code")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("code");
+
                     b.Property<string>("Name")
+                        .IsRequired()
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)")
                         .HasColumnName("name");
@@ -712,7 +967,6 @@ namespace EVDataMarketplace.API.Migrations
                         .HasColumnName("sub_start");
 
                     b.Property<decimal?>("TotalPrice")
-                        .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)")
                         .HasColumnName("total_price");
 
@@ -725,6 +979,150 @@ namespace EVDataMarketplace.API.Migrations
                     b.HasIndex("ProvinceId");
 
                     b.ToTable("Subscription");
+                });
+
+            modelBuilder.Entity("EVDataMarketplace.API.Models.SubscriptionPackagePurchase", b =>
+                {
+                    b.Property<int>("SubscriptionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("subscription_id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SubscriptionId"));
+
+                    b.Property<bool>("AutoRenew")
+                        .HasColumnType("bit")
+                        .HasColumnName("auto_renew");
+
+                    b.Property<string>("BillingCycle")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("billing_cycle");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("cancelled_at");
+
+                    b.Property<int>("ConsumerId")
+                        .HasColumnType("int")
+                        .HasColumnName("consumer_id");
+
+                    b.Property<int>("DashboardAccessCount")
+                        .HasColumnType("int")
+                        .HasColumnName("dashboard_access_count");
+
+                    b.Property<int?>("DistrictId")
+                        .HasColumnType("int")
+                        .HasColumnName("district_id");
+
+                    b.Property<DateTime>("EndDate")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("end_date");
+
+                    b.Property<DateTime?>("LastAccessDate")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("last_access_date");
+
+                    b.Property<decimal>("MonthlyPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18, 2)")
+                        .HasColumnName("monthly_price");
+
+                    b.Property<int>("ProvinceId")
+                        .HasColumnType("int")
+                        .HasColumnName("province_id");
+
+                    b.Property<DateTime>("PurchaseDate")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("purchase_date");
+
+                    b.Property<DateTime>("StartDate")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("start_date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("status");
+
+                    b.Property<decimal>("TotalPaid")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18, 2)")
+                        .HasColumnName("total_paid");
+
+                    b.HasKey("SubscriptionId");
+
+                    b.HasIndex("ConsumerId");
+
+                    b.HasIndex("DistrictId");
+
+                    b.HasIndex("ProvinceId");
+
+                    b.ToTable("SubscriptionPackagePurchase");
+                });
+
+            modelBuilder.Entity("EVDataMarketplace.API.Models.SystemPricing", b =>
+                {
+                    b.Property<int>("PricingId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("pricing_id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PricingId"));
+
+                    b.Property<decimal>("AdminCommissionPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5, 2)")
+                        .HasColumnName("admin_commission_percent");
+
+                    b.Property<decimal?>("ApiPricePerCall")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18, 4)")
+                        .HasColumnName("api_price_per_call");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("PackageType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("package_type");
+
+                    b.Property<decimal>("PricePerRow")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18, 4)")
+                        .HasColumnName("price_per_row");
+
+                    b.Property<decimal>("ProviderCommissionPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5, 2)")
+                        .HasColumnName("provider_commission_percent");
+
+                    b.Property<decimal?>("SubscriptionMonthlyBase")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18, 2)")
+                        .HasColumnName("subscription_monthly_base");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("PricingId");
+
+                    b.ToTable("SystemPricing");
                 });
 
             modelBuilder.Entity("EVDataMarketplace.API.Models.User", b =>
@@ -780,6 +1178,25 @@ namespace EVDataMarketplace.API.Migrations
                     b.ToTable("User");
                 });
 
+            modelBuilder.Entity("EVDataMarketplace.API.Models.APIKey", b =>
+                {
+                    b.HasOne("EVDataMarketplace.API.Models.APIPackagePurchase", "APIPackagePurchase")
+                        .WithMany("APIKeys")
+                        .HasForeignKey("ApiPurchaseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EVDataMarketplace.API.Models.DataConsumer", "DataConsumer")
+                        .WithMany("APIKeys")
+                        .HasForeignKey("ConsumerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("APIPackagePurchase");
+
+                    b.Navigation("DataConsumer");
+                });
+
             modelBuilder.Entity("EVDataMarketplace.API.Models.APIPackage", b =>
                 {
                     b.HasOne("EVDataMarketplace.API.Models.DataConsumer", "DataConsumer")
@@ -797,6 +1214,31 @@ namespace EVDataMarketplace.API.Migrations
                     b.Navigation("Dataset");
                 });
 
+            modelBuilder.Entity("EVDataMarketplace.API.Models.APIPackagePurchase", b =>
+                {
+                    b.HasOne("EVDataMarketplace.API.Models.DataConsumer", "DataConsumer")
+                        .WithMany("APIPackagePurchases")
+                        .HasForeignKey("ConsumerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EVDataMarketplace.API.Models.District", "District")
+                        .WithMany()
+                        .HasForeignKey("DistrictId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EVDataMarketplace.API.Models.Province", "Province")
+                        .WithMany("APIPackagePurchases")
+                        .HasForeignKey("ProvinceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("DataConsumer");
+
+                    b.Navigation("District");
+
+                    b.Navigation("Province");
+                });
+
             modelBuilder.Entity("EVDataMarketplace.API.Models.DataConsumer", b =>
                 {
                     b.HasOne("EVDataMarketplace.API.Models.User", "User")
@@ -806,6 +1248,32 @@ namespace EVDataMarketplace.API.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("EVDataMarketplace.API.Models.DataPackagePurchase", b =>
+                {
+                    b.HasOne("EVDataMarketplace.API.Models.DataConsumer", "DataConsumer")
+                        .WithMany("DataPackagePurchases")
+                        .HasForeignKey("ConsumerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EVDataMarketplace.API.Models.District", "District")
+                        .WithMany()
+                        .HasForeignKey("DistrictId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EVDataMarketplace.API.Models.Province", "Province")
+                        .WithMany("DataPackagePurchases")
+                        .HasForeignKey("ProvinceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("DataConsumer");
+
+                    b.Navigation("District");
+
+                    b.Navigation("Province");
                 });
 
             modelBuilder.Entity("EVDataMarketplace.API.Models.DataProvider", b =>
@@ -830,16 +1298,10 @@ namespace EVDataMarketplace.API.Migrations
                     b.HasOne("EVDataMarketplace.API.Models.DataProvider", "DataProvider")
                         .WithMany("Datasets")
                         .HasForeignKey("ProviderId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("EVDataMarketplace.API.Models.PricingTier", "PricingTier")
-                        .WithMany("Datasets")
-                        .HasForeignKey("TierId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.Navigation("DataProvider");
-
-                    b.Navigation("PricingTier");
                 });
 
             modelBuilder.Entity("EVDataMarketplace.API.Models.DatasetModeration", b =>
@@ -867,7 +1329,34 @@ namespace EVDataMarketplace.API.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("EVDataMarketplace.API.Models.District", "District")
+                        .WithMany("DatasetRecords")
+                        .HasForeignKey("DistrictId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EVDataMarketplace.API.Models.Province", "Province")
+                        .WithMany("DatasetRecords")
+                        .HasForeignKey("ProvinceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("Dataset");
+
+                    b.Navigation("District");
+
+                    b.Navigation("Province");
+                });
+
+            modelBuilder.Entity("EVDataMarketplace.API.Models.District", b =>
+                {
+                    b.HasOne("EVDataMarketplace.API.Models.Province", "Province")
+                        .WithMany("Districts")
+                        .HasForeignKey("ProvinceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Province");
                 });
 
             modelBuilder.Entity("EVDataMarketplace.API.Models.OneTimePurchase", b =>
@@ -954,13 +1443,52 @@ namespace EVDataMarketplace.API.Migrations
                     b.Navigation("Province");
                 });
 
+            modelBuilder.Entity("EVDataMarketplace.API.Models.SubscriptionPackagePurchase", b =>
+                {
+                    b.HasOne("EVDataMarketplace.API.Models.DataConsumer", "DataConsumer")
+                        .WithMany("SubscriptionPackagePurchases")
+                        .HasForeignKey("ConsumerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EVDataMarketplace.API.Models.District", "District")
+                        .WithMany()
+                        .HasForeignKey("DistrictId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EVDataMarketplace.API.Models.Province", "Province")
+                        .WithMany("SubscriptionPackagePurchases")
+                        .HasForeignKey("ProvinceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("DataConsumer");
+
+                    b.Navigation("District");
+
+                    b.Navigation("Province");
+                });
+
+            modelBuilder.Entity("EVDataMarketplace.API.Models.APIPackagePurchase", b =>
+                {
+                    b.Navigation("APIKeys");
+                });
+
             modelBuilder.Entity("EVDataMarketplace.API.Models.DataConsumer", b =>
                 {
+                    b.Navigation("APIKeys");
+
+                    b.Navigation("APIPackagePurchases");
+
                     b.Navigation("APIPackages");
+
+                    b.Navigation("DataPackagePurchases");
 
                     b.Navigation("OneTimePurchases");
 
                     b.Navigation("Payments");
+
+                    b.Navigation("SubscriptionPackagePurchases");
 
                     b.Navigation("Subscriptions");
                 });
@@ -987,19 +1515,29 @@ namespace EVDataMarketplace.API.Migrations
                     b.Navigation("Subscriptions");
                 });
 
+            modelBuilder.Entity("EVDataMarketplace.API.Models.District", b =>
+                {
+                    b.Navigation("DatasetRecords");
+                });
+
             modelBuilder.Entity("EVDataMarketplace.API.Models.Payment", b =>
                 {
                     b.Navigation("RevenueShares");
                 });
 
-            modelBuilder.Entity("EVDataMarketplace.API.Models.PricingTier", b =>
-                {
-                    b.Navigation("Datasets");
-                });
-
             modelBuilder.Entity("EVDataMarketplace.API.Models.Province", b =>
                 {
+                    b.Navigation("APIPackagePurchases");
+
+                    b.Navigation("DataPackagePurchases");
+
                     b.Navigation("DataProviders");
+
+                    b.Navigation("DatasetRecords");
+
+                    b.Navigation("Districts");
+
+                    b.Navigation("SubscriptionPackagePurchases");
 
                     b.Navigation("Subscriptions");
                 });

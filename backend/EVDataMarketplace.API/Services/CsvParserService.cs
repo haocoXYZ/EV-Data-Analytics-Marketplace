@@ -1,34 +1,34 @@
 using System.Globalization;
 using System.Text;
-using System.Text.Json;
 using CsvHelper;
 using CsvHelper.Configuration;
+using EVDataMarketplace.API.DTOs;
+using EVDataMarketplace.API.Models;
+using EVDataMarketplace.API.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace EVDataMarketplace.API.Services;
 
-public interface ICsvParserService
-{
-    Task<List<Dictionary<string, object>>> ParseCsvAsync(Stream csvStream);
-    Task<(int rowCount, List<string> columns)> GetCsvInfoAsync(Stream csvStream);
-    string ConvertRecordsToCsv(List<string> recordsJson);
-}
-
 public class CsvParserService : ICsvParserService
 {
-    private readonly ILogger<CsvParserService> _logger;
+    private readonly EVDataMarketplaceDbContext _context;
 
-    public CsvParserService(ILogger<CsvParserService> logger)
+    public CsvParserService(EVDataMarketplaceDbContext context)
     {
-        _logger = logger;
+        _context = context;
     }
 
-    public async Task<List<Dictionary<string, object>>> ParseCsvAsync(Stream csvStream)
+    public async Task<(bool success, string message, List<DatasetRecord> records)> ParseAndValidateCsvAsync(
+        Stream fileStream,
+        int datasetId,
+        string providerName)
     {
-        var records = new List<Dictionary<string, object>>();
+        var records = new List<DatasetRecord>();
+        var errors = new List<string>();
 
         try
         {
-            using var reader = new StreamReader(csvStream, Encoding.UTF8);
+            using var reader = new StreamReader(fileStream, Encoding.UTF8);
             var config = new CsvConfiguration(CultureInfo.InvariantCulture)
             {
                 HasHeaderRecord = true,
@@ -41,138 +41,144 @@ public class CsvParserService : ICsvParserService
             // Read header
             await csv.ReadAsync();
             csv.ReadHeader();
-            var headers = csv.HeaderRecord;
 
-            if (headers == null || headers.Length == 0)
+            // Validate required columns
+            var requiredColumns = new[]
             {
-                throw new InvalidDataException("CSV file has no headers");
-            }
+                "StationId", "StationName", "ProvinceId", "DistrictId",
+                "ChargingTimestamp", "EnergyKwh"
+            };
 
-            // Read all records
-            while (await csv.ReadAsync())
+            foreach (var column in requiredColumns)
             {
-                var record = new Dictionary<string, object>();
-
-                foreach (var header in headers)
+                if (!csv.HeaderRecord.Contains(column))
                 {
-                    var value = csv.GetField(header);
-                    record[header] = value ?? string.Empty;
+                    errors.Add($"Missing required column: {column}");
                 }
-
-                records.Add(record);
             }
 
-            _logger.LogInformation("Parsed {Count} records from CSV", records.Count);
-            return records;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error parsing CSV file");
-            throw new InvalidDataException("Failed to parse CSV file: " + ex.Message);
-        }
-    }
-
-    public async Task<(int rowCount, List<string> columns)> GetCsvInfoAsync(Stream csvStream)
-    {
-        try
-        {
-            csvStream.Position = 0; // Reset stream
-
-            using var reader = new StreamReader(csvStream, Encoding.UTF8, leaveOpen: true);
-            var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+            if (errors.Any())
             {
-                HasHeaderRecord = true,
-                MissingFieldFound = null,
-                BadDataFound = null
-            };
+                return (false, string.Join("; ", errors), records);
+            }
 
-            using var csv = new CsvReader(reader, config);
+            // Load valid province and district IDs for validation
+            var validProvinceIds = await _context.Provinces.Select(p => p.ProvinceId).ToListAsync();
+            var validDistrictIds = await _context.Districts.Select(d => d.DistrictId).ToListAsync();
 
-            // Read header
-            await csv.ReadAsync();
-            csv.ReadHeader();
-            var headers = csv.HeaderRecord?.ToList() ?? new List<string>();
+            int rowNumber = 1;
 
-            // Count rows
-            int rowCount = 0;
             while (await csv.ReadAsync())
             {
-                rowCount++;
-            }
+                rowNumber++;
 
-            csvStream.Position = 0; // Reset for next use
-            return (rowCount, headers);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error reading CSV info");
-            throw new InvalidDataException("Failed to read CSV file info: " + ex.Message);
-        }
-    }
-
-    public string ConvertRecordsToCsv(List<string> recordsJson)
-    {
-        try
-        {
-            if (recordsJson.Count == 0)
-            {
-                return string.Empty;
-            }
-
-            // Deserialize first record to get headers
-            var firstRecord = JsonSerializer.Deserialize<Dictionary<string, object>>(recordsJson[0]);
-            if (firstRecord == null || firstRecord.Count == 0)
-            {
-                return string.Empty;
-            }
-
-            var headers = firstRecord.Keys.ToList();
-            var csv = new StringBuilder();
-
-            // Write header
-            csv.AppendLine(string.Join(",", headers.Select(h => EscapeCsvValue(h))));
-
-            // Write data rows
-            foreach (var recordJson in recordsJson)
-            {
-                var record = JsonSerializer.Deserialize<Dictionary<string, object>>(recordJson);
-                if (record != null)
+                try
                 {
-                    var values = headers.Select(h =>
+                    var stationId = csv.GetField<string>("StationId");
+                    var stationName = csv.GetField<string>("StationName");
+                    var provinceId = csv.GetField<int>("ProvinceId");
+                    var districtId = csv.GetField<int>("DistrictId");
+                    var chargingTimestamp = csv.GetField<DateTime>("ChargingTimestamp");
+                    var energyKwh = csv.GetField<decimal>("EnergyKwh");
+
+                    // Validation
+                    if (string.IsNullOrWhiteSpace(stationId))
                     {
-                        if (record.TryGetValue(h, out var value))
-                        {
-                            return EscapeCsvValue(value?.ToString() ?? string.Empty);
-                        }
-                        return string.Empty;
-                    });
-                    csv.AppendLine(string.Join(",", values));
+                        errors.Add($"Row {rowNumber}: StationId is required");
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(stationName))
+                    {
+                        errors.Add($"Row {rowNumber}: StationName is required");
+                        continue;
+                    }
+
+                    if (!validProvinceIds.Contains(provinceId))
+                    {
+                        errors.Add($"Row {rowNumber}: Invalid ProvinceId {provinceId}");
+                        continue;
+                    }
+
+                    if (!validDistrictIds.Contains(districtId))
+                    {
+                        errors.Add($"Row {rowNumber}: Invalid DistrictId {districtId}");
+                        continue;
+                    }
+
+                    if (energyKwh <= 0)
+                    {
+                        errors.Add($"Row {rowNumber}: EnergyKwh must be positive");
+                        continue;
+                    }
+
+                    // Create record
+                    var record = new DatasetRecord
+                    {
+                        DatasetId = datasetId,
+                        StationId = stationId,
+                        StationName = stationName,
+                        StationAddress = csv.GetField<string>("StationAddress"),
+                        StationOperator = csv.GetField<string>("StationOperator"),
+                        ProvinceId = provinceId,
+                        DistrictId = districtId,
+                        ChargingTimestamp = chargingTimestamp,
+                        EnergyKwh = energyKwh,
+                        Voltage = csv.GetField<decimal?>("Voltage"),
+                        Current = csv.GetField<decimal?>("Current"),
+                        PowerKw = csv.GetField<decimal?>("PowerKw"),
+                        DurationMinutes = csv.GetField<decimal?>("DurationMinutes"),
+                        ChargingCost = csv.GetField<decimal?>("ChargingCost"),
+                        VehicleType = csv.GetField<string>("VehicleType"),
+                        BatteryCapacityKwh = csv.GetField<decimal?>("BatteryCapacityKwh"),
+                        SocStart = csv.GetField<decimal?>("SocStart"),
+                        SocEnd = csv.GetField<decimal?>("SocEnd"),
+                        DataSource = providerName,
+                        CreatedAt = DateTime.Now
+                    };
+
+                    records.Add(record);
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"Row {rowNumber}: {ex.Message}");
                 }
             }
 
-            _logger.LogInformation("Converted {Count} records to CSV", recordsJson.Count);
-            return csv.ToString();
+            if (errors.Count > 10)
+            {
+                return (false, $"Too many errors ({errors.Count}). First 10: {string.Join("; ", errors.Take(10))}", records);
+            }
+
+            if (errors.Any())
+            {
+                return (false, string.Join("; ", errors), records);
+            }
+
+            if (!records.Any())
+            {
+                return (false, "No valid data rows found", records);
+            }
+
+            return (true, $"Successfully parsed {records.Count} records", records);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error converting records to CSV");
-            throw new InvalidDataException("Failed to convert records to CSV: " + ex.Message);
+            return (false, $"Failed to parse CSV: {ex.Message}", records);
         }
     }
 
-    private string EscapeCsvValue(string value)
+    public byte[] GenerateCsvTemplate()
     {
-        if (string.IsNullOrEmpty(value))
-        {
-            return string.Empty;
-        }
+        var sb = new StringBuilder();
 
-        // Escape values containing comma, quote, or newline
-        if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
-        {
-            return $"\"{value.Replace("\"", "\"\"")}\"";
-        }
+        // Header
+        sb.AppendLine("StationId,StationName,StationAddress,StationOperator,ProvinceId,DistrictId,ChargingTimestamp,EnergyKwh,Voltage,Current,PowerKw,DurationMinutes,ChargingCost,VehicleType,BatteryCapacityKwh,SocStart,SocEnd");
 
-        return value;
+        // Sample row with example data
+        sb.AppendLine("STATION_001,VinFast Charging Station 1,123 Main St,VinFast,1,1,2024-01-01 08:00:00,45.5,220,32.5,7.2,60,50000,VF8,82.5,20.0,90.0");
+        sb.AppendLine("STATION_002,VinFast Charging Station 2,456 Second Ave,VinFast,1,5,2024-01-01 09:30:00,38.2,220,28.0,6.5,45,42000,VF9,87.3,30.0,80.0");
+
+        return Encoding.UTF8.GetBytes(sb.ToString());
     }
 }

@@ -16,15 +16,16 @@ public class EVDataMarketplaceDbContext : DbContext
     public DbSet<DataConsumer> DataConsumers { get; set; }
 
     // Pricing & Dataset
-    public DbSet<PricingTier> PricingTiers { get; set; }
+    public DbSet<SystemPricing> SystemPricings { get; set; }
     public DbSet<Dataset> Datasets { get; set; }
     public DbSet<DatasetRecord> DatasetRecords { get; set; }
     public DbSet<DatasetModeration> DatasetModerations { get; set; }
 
     // Purchase Packages
-    public DbSet<OneTimePurchase> OneTimePurchases { get; set; }
-    public DbSet<Subscription> Subscriptions { get; set; }
-    public DbSet<APIPackage> APIPackages { get; set; }
+    public DbSet<DataPackagePurchase> DataPackagePurchases { get; set; }
+    public DbSet<SubscriptionPackagePurchase> SubscriptionPackagePurchases { get; set; }
+    public DbSet<APIPackagePurchase> APIPackagePurchases { get; set; }
+    public DbSet<APIKey> APIKeys { get; set; }
 
     // Payment & Revenue
     public DbSet<Payment> Payments { get; set; }
@@ -33,6 +34,7 @@ public class EVDataMarketplaceDbContext : DbContext
 
     // Location
     public DbSet<Province> Provinces { get; set; }
+    public DbSet<District> Districts { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -59,12 +61,6 @@ public class EVDataMarketplaceDbContext : DbContext
             .HasForeignKey(d => d.ProviderId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        modelBuilder.Entity<Dataset>()
-            .HasOne(d => d.PricingTier)
-            .WithMany(pt => pt.Datasets)
-            .HasForeignKey(d => d.TierId)
-            .OnDelete(DeleteBehavior.Restrict);
-
         // DatasetRecord relationships
         modelBuilder.Entity<DatasetRecord>()
             .HasOne(dr => dr.Dataset)
@@ -73,7 +69,25 @@ public class EVDataMarketplaceDbContext : DbContext
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<DatasetRecord>()
+            .HasOne(dr => dr.Province)
+            .WithMany(p => p.DatasetRecords)
+            .HasForeignKey(dr => dr.ProvinceId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<DatasetRecord>()
+            .HasOne(dr => dr.District)
+            .WithMany(d => d.DatasetRecords)
+            .HasForeignKey(dr => dr.DistrictId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<DatasetRecord>()
             .HasIndex(dr => dr.DatasetId);
+
+        modelBuilder.Entity<DatasetRecord>()
+            .HasIndex(dr => new { dr.ProvinceId, dr.DistrictId });
+
+        modelBuilder.Entity<DatasetRecord>()
+            .HasIndex(dr => dr.ChargingTimestamp);
 
         // DatasetModeration relationships
         modelBuilder.Entity<DatasetModeration>()
@@ -86,49 +100,6 @@ public class EVDataMarketplaceDbContext : DbContext
             .HasOne(dm => dm.Moderator)
             .WithMany(u => u.DatasetModerations)
             .HasForeignKey(dm => dm.ModeratorUserId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        // Purchase relationships
-        modelBuilder.Entity<OneTimePurchase>()
-            .HasOne(otp => otp.Dataset)
-            .WithMany(d => d.OneTimePurchases)
-            .HasForeignKey(otp => otp.DatasetId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<OneTimePurchase>()
-            .HasOne(otp => otp.DataConsumer)
-            .WithMany(dc => dc.OneTimePurchases)
-            .HasForeignKey(otp => otp.ConsumerId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<Subscription>()
-            .HasOne(s => s.Dataset)
-            .WithMany(d => d.Subscriptions)
-            .HasForeignKey(s => s.DatasetId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<Subscription>()
-            .HasOne(s => s.DataConsumer)
-            .WithMany(dc => dc.Subscriptions)
-            .HasForeignKey(s => s.ConsumerId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<Subscription>()
-            .HasOne(s => s.Province)
-            .WithMany(p => p.Subscriptions)
-            .HasForeignKey(s => s.ProvinceId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<APIPackage>()
-            .HasOne(ap => ap.Dataset)
-            .WithMany(d => d.APIPackages)
-            .HasForeignKey(ap => ap.DatasetId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<APIPackage>()
-            .HasOne(ap => ap.DataConsumer)
-            .WithMany(dc => dc.APIPackages)
-            .HasForeignKey(ap => ap.ConsumerId)
             .OnDelete(DeleteBehavior.Restrict);
 
         // Payment relationships
@@ -158,44 +129,133 @@ public class EVDataMarketplaceDbContext : DbContext
             .HasForeignKey(p => p.ProviderId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Decimal precision configuration
-        modelBuilder.Entity<PricingTier>()
-            .Property(pt => pt.BasePricePerMb)
+        // District relationships
+        modelBuilder.Entity<District>()
+            .HasOne(d => d.Province)
+            .WithMany(p => p.Districts)
+            .HasForeignKey(d => d.ProvinceId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // DataPackagePurchase relationships
+        modelBuilder.Entity<DataPackagePurchase>()
+            .HasOne(dp => dp.DataConsumer)
+            .WithMany(dc => dc.DataPackagePurchases)
+            .HasForeignKey(dp => dp.ConsumerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<DataPackagePurchase>()
+            .HasOne(dp => dp.Province)
+            .WithMany(p => p.DataPackagePurchases)
+            .HasForeignKey(dp => dp.ProvinceId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<DataPackagePurchase>()
+            .HasOne(dp => dp.District)
+            .WithMany()
+            .HasForeignKey(dp => dp.DistrictId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // SubscriptionPackagePurchase relationships
+        modelBuilder.Entity<SubscriptionPackagePurchase>()
+            .HasOne(sp => sp.DataConsumer)
+            .WithMany(dc => dc.SubscriptionPackagePurchases)
+            .HasForeignKey(sp => sp.ConsumerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<SubscriptionPackagePurchase>()
+            .HasOne(sp => sp.Province)
+            .WithMany(p => p.SubscriptionPackagePurchases)
+            .HasForeignKey(sp => sp.ProvinceId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<SubscriptionPackagePurchase>()
+            .HasOne(sp => sp.District)
+            .WithMany()
+            .HasForeignKey(sp => sp.DistrictId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // APIPackagePurchase relationships
+        modelBuilder.Entity<APIPackagePurchase>()
+            .HasOne(ap => ap.DataConsumer)
+            .WithMany(dc => dc.APIPackagePurchases)
+            .HasForeignKey(ap => ap.ConsumerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<APIPackagePurchase>()
+            .HasOne(ap => ap.Province)
+            .WithMany(p => p.APIPackagePurchases)
+            .HasForeignKey(ap => ap.ProvinceId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<APIPackagePurchase>()
+            .HasOne(ap => ap.District)
+            .WithMany()
+            .HasForeignKey(ap => ap.DistrictId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // APIKey relationships
+        modelBuilder.Entity<APIKey>()
+            .HasOne(ak => ak.APIPackagePurchase)
+            .WithMany(ap => ap.APIKeys)
+            .HasForeignKey(ak => ak.ApiPurchaseId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<APIKey>()
+            .HasOne(ak => ak.DataConsumer)
+            .WithMany(dc => dc.APIKeys)
+            .HasForeignKey(ak => ak.ConsumerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<APIKey>()
+            .HasIndex(ak => ak.KeyValue)
+            .IsUnique();
+
+        // Decimal precision configuration for new models
+        // SystemPricing
+        modelBuilder.Entity<SystemPricing>()
+            .Property(sp => sp.PricePerRow)
+            .HasPrecision(18, 4);
+
+        modelBuilder.Entity<SystemPricing>()
+            .Property(sp => sp.SubscriptionMonthlyBase)
             .HasPrecision(18, 2);
 
-        modelBuilder.Entity<PricingTier>()
-            .Property(pt => pt.ApiPricePerCall)
-            .HasPrecision(18, 2);
+        modelBuilder.Entity<SystemPricing>()
+            .Property(sp => sp.ApiPricePerCall)
+            .HasPrecision(18, 4);
 
-        modelBuilder.Entity<PricingTier>()
-            .Property(pt => pt.SubscriptionPricePerRegion)
-            .HasPrecision(18, 2);
-
-        modelBuilder.Entity<PricingTier>()
-            .Property(pt => pt.ProviderCommissionPercent)
+        modelBuilder.Entity<SystemPricing>()
+            .Property(sp => sp.ProviderCommissionPercent)
             .HasPrecision(5, 2);
 
-        modelBuilder.Entity<PricingTier>()
-            .Property(pt => pt.AdminCommissionPercent)
+        modelBuilder.Entity<SystemPricing>()
+            .Property(sp => sp.AdminCommissionPercent)
             .HasPrecision(5, 2);
 
-        modelBuilder.Entity<Dataset>()
-            .Property(d => d.DataSizeMb)
+        // DataPackagePurchase
+        modelBuilder.Entity<DataPackagePurchase>()
+            .Property(dp => dp.PricePerRow)
+            .HasPrecision(18, 4);
+
+        modelBuilder.Entity<DataPackagePurchase>()
+            .Property(dp => dp.TotalPrice)
             .HasPrecision(18, 2);
 
-        modelBuilder.Entity<OneTimePurchase>()
-            .Property(otp => otp.TotalPrice)
+        // SubscriptionPackagePurchase
+        modelBuilder.Entity<SubscriptionPackagePurchase>()
+            .Property(sp => sp.MonthlyPrice)
             .HasPrecision(18, 2);
 
-        modelBuilder.Entity<Subscription>()
-            .Property(s => s.TotalPrice)
+        modelBuilder.Entity<SubscriptionPackagePurchase>()
+            .Property(sp => sp.TotalPaid)
             .HasPrecision(18, 2);
 
-        modelBuilder.Entity<APIPackage>()
+        // APIPackagePurchase
+        modelBuilder.Entity<APIPackagePurchase>()
             .Property(ap => ap.PricePerCall)
-            .HasPrecision(18, 2);
+            .HasPrecision(18, 4);
 
-        modelBuilder.Entity<APIPackage>()
+        modelBuilder.Entity<APIPackagePurchase>()
             .Property(ap => ap.TotalPaid)
             .HasPrecision(18, 2);
 
@@ -241,9 +301,5 @@ public class EVDataMarketplaceDbContext : DbContext
 
         modelBuilder.Entity<Payment>()
             .HasIndex(p => p.PaymentDate);
-
-        modelBuilder.Entity<APIPackage>()
-            .HasIndex(ap => ap.ApiKey)
-            .IsUnique();
     }
 }

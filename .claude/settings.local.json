@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(dotnet:*)"
+      "Bash(dotnet build:*)",
+      "Bash(dotnet ef:*)",
+      "Bash(sqlcmd:*)",
+      "Bash(dotnet run)",
+      "Bash(dotnet new:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(timeout 15 bash:*)",
+      "Bash(powershell.exe -Command \"Stop-Process -Id 5244 -Force\")",
+      "Bash(powershell.exe -Command \"Get-Process -Name ''EVDataMarketplace.API'' -ErrorAction SilentlyContinue | Stop-Process -Force\")"
     ],
     "deny": [],
     "ask": []

@@ -1,5 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using EVDataMarketplace.API.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace EVDataMarketplace.API.Data;
 
@@ -7,358 +7,437 @@ public static class DbSeeder
 {
     public static void SeedData(EVDataMarketplaceDbContext context)
     {
+        // Ensure database is created
+        context.Database.EnsureCreated();
+
         // Seed Provinces
         if (!context.Provinces.Any())
         {
-            var provinces = new List<Province>
-            {
-                new Province { Name = "Hà Nội" },
-                new Province { Name = "TP Hồ Chí Minh" },
-                new Province { Name = "Đà Nẵng" },
-                new Province { Name = "Hải Phòng" },
-                new Province { Name = "Cần Thơ" },
-                new Province { Name = "Bình Dương" },
-                new Province { Name = "Đồng Nai" },
-                new Province { Name = "Khánh Hòa" }
-            };
-            context.Provinces.AddRange(provinces);
-            context.SaveChanges();
+            SeedProvinces(context);
         }
 
-        // Seed Admin User
-        if (!context.Users.Any(u => u.Role == "Admin"))
+        // Seed Districts
+        if (!context.Districts.Any())
         {
-            var adminPassword = BCrypt.Net.BCrypt.HashPassword("Admin@123");
-            var admin = new User
+            SeedDistricts(context);
+        }
+
+        // Seed System Pricing
+        if (!context.SystemPricings.Any())
+        {
+            SeedSystemPricing(context);
+        }
+
+        // Seed Users
+        if (!context.Users.Any())
+        {
+            SeedUsers(context);
+        }
+
+        // Seed Sample Datasets (after users)
+        if (!context.Datasets.Any())
+        {
+            SeedSampleDatasets(context);
+        }
+
+        context.SaveChanges();
+    }
+
+    private static void SeedProvinces(EVDataMarketplaceDbContext context)
+    {
+        var provinces = new List<Province>
+        {
+            new Province { Name = "Hà Nội", Code = "01" },
+            new Province { Name = "Hồ Chí Minh", Code = "79" },
+            new Province { Name = "Đà Nẵng", Code = "48" },
+            new Province { Name = "Hải Phòng", Code = "31" },
+            new Province { Name = "Cần Thơ", Code = "92" },
+            new Province { Name = "An Giang", Code = "89" },
+            new Province { Name = "Bà Rịa - Vũng Tàu", Code = "77" },
+            new Province { Name = "Bắc Giang", Code = "24" },
+            new Province { Name = "Bắc Kạn", Code = "06" },
+            new Province { Name = "Bạc Liêu", Code = "95" },
+            new Province { Name = "Bắc Ninh", Code = "27" },
+            new Province { Name = "Bến Tre", Code = "83" },
+            new Province { Name = "Bình Định", Code = "52" },
+            new Province { Name = "Bình Dương", Code = "74" },
+            new Province { Name = "Bình Phước", Code = "70" },
+            new Province { Name = "Bình Thuận", Code = "60" },
+            new Province { Name = "Cà Mau", Code = "96" },
+            new Province { Name = "Cao Bằng", Code = "04" },
+            new Province { Name = "Đắk Lắk", Code = "66" },
+            new Province { Name = "Đắk Nông", Code = "67" },
+            new Province { Name = "Điện Biên", Code = "11" },
+            new Province { Name = "Đồng Nai", Code = "75" },
+            new Province { Name = "Đồng Tháp", Code = "87" },
+            new Province { Name = "Gia Lai", Code = "64" },
+            new Province { Name = "Hà Giang", Code = "02" },
+            new Province { Name = "Hà Nam", Code = "35" },
+            new Province { Name = "Hà Tĩnh", Code = "42" },
+            new Province { Name = "Hải Dương", Code = "30" },
+            new Province { Name = "Hậu Giang", Code = "93" },
+            new Province { Name = "Hòa Bình", Code = "17" },
+            new Province { Name = "Hưng Yên", Code = "33" },
+            new Province { Name = "Khánh Hòa", Code = "56" },
+            new Province { Name = "Kiên Giang", Code = "91" },
+            new Province { Name = "Kon Tum", Code = "62" },
+            new Province { Name = "Lai Châu", Code = "12" },
+            new Province { Name = "Lâm Đồng", Code = "68" },
+            new Province { Name = "Lạng Sơn", Code = "20" },
+            new Province { Name = "Lào Cai", Code = "10" },
+            new Province { Name = "Long An", Code = "80" },
+            new Province { Name = "Nam Định", Code = "36" },
+            new Province { Name = "Nghệ An", Code = "40" },
+            new Province { Name = "Ninh Bình", Code = "37" },
+            new Province { Name = "Ninh Thuận", Code = "58" },
+            new Province { Name = "Phú Thọ", Code = "25" },
+            new Province { Name = "Phú Yên", Code = "54" },
+            new Province { Name = "Quảng Bình", Code = "44" },
+            new Province { Name = "Quảng Nam", Code = "49" },
+            new Province { Name = "Quảng Ngãi", Code = "51" },
+            new Province { Name = "Quảng Ninh", Code = "22" },
+            new Province { Name = "Quảng Trị", Code = "45" },
+            new Province { Name = "Sóc Trăng", Code = "94" },
+            new Province { Name = "Sơn La", Code = "14" },
+            new Province { Name = "Tây Ninh", Code = "72" },
+            new Province { Name = "Thái Bình", Code = "34" },
+            new Province { Name = "Thái Nguyên", Code = "19" },
+            new Province { Name = "Thanh Hóa", Code = "38" },
+            new Province { Name = "Thừa Thiên Huế", Code = "46" },
+            new Province { Name = "Tiền Giang", Code = "82" },
+            new Province { Name = "Trà Vinh", Code = "84" },
+            new Province { Name = "Tuyên Quang", Code = "08" },
+            new Province { Name = "Vĩnh Long", Code = "86" },
+            new Province { Name = "Vĩnh Phúc", Code = "26" },
+            new Province { Name = "Yên Bái", Code = "15" }
+        };
+
+        context.Provinces.AddRange(provinces);
+        context.SaveChanges();
+    }
+
+    private static void SeedDistricts(EVDataMarketplaceDbContext context)
+    {
+        // Get province IDs
+        var hanoiId = context.Provinces.First(p => p.Name == "Hà Nội").ProvinceId;
+        var hcmcId = context.Provinces.First(p => p.Name == "Hồ Chí Minh").ProvinceId;
+        var danangId = context.Provinces.First(p => p.Name == "Đà Nẵng").ProvinceId;
+
+        var districts = new List<District>
+        {
+            // Hà Nội districts
+            new District { ProvinceId = hanoiId, Name = "Ba Đình", Type = "Quận" },
+            new District { ProvinceId = hanoiId, Name = "Hoàn Kiếm", Type = "Quận" },
+            new District { ProvinceId = hanoiId, Name = "Tây Hồ", Type = "Quận" },
+            new District { ProvinceId = hanoiId, Name = "Long Biên", Type = "Quận" },
+            new District { ProvinceId = hanoiId, Name = "Cầu Giấy", Type = "Quận" },
+            new District { ProvinceId = hanoiId, Name = "Đống Đa", Type = "Quận" },
+            new District { ProvinceId = hanoiId, Name = "Hai Bà Trưng", Type = "Quận" },
+            new District { ProvinceId = hanoiId, Name = "Hoàng Mai", Type = "Quận" },
+            new District { ProvinceId = hanoiId, Name = "Thanh Xuân", Type = "Quận" },
+            new District { ProvinceId = hanoiId, Name = "Sóc Sơn", Type = "Huyện" },
+            new District { ProvinceId = hanoiId, Name = "Đông Anh", Type = "Huyện" },
+            new District { ProvinceId = hanoiId, Name = "Gia Lâm", Type = "Huyện" },
+            new District { ProvinceId = hanoiId, Name = "Nam Từ Liêm", Type = "Quận" },
+            new District { ProvinceId = hanoiId, Name = "Thanh Trì", Type = "Huyện" },
+            new District { ProvinceId = hanoiId, Name = "Bắc Từ Liêm", Type = "Quận" },
+            new District { ProvinceId = hanoiId, Name = "Mê Linh", Type = "Huyện" },
+            new District { ProvinceId = hanoiId, Name = "Hà Đông", Type = "Quận" },
+            new District { ProvinceId = hanoiId, Name = "Sơn Tây", Type = "Thị xã" },
+            new District { ProvinceId = hanoiId, Name = "Ba Vì", Type = "Huyện" },
+            new District { ProvinceId = hanoiId, Name = "Phúc Thọ", Type = "Huyện" },
+            new District { ProvinceId = hanoiId, Name = "Đan Phượng", Type = "Huyện" },
+            new District { ProvinceId = hanoiId, Name = "Hoài Đức", Type = "Huyện" },
+            new District { ProvinceId = hanoiId, Name = "Quốc Oai", Type = "Huyện" },
+            new District { ProvinceId = hanoiId, Name = "Thạch Thất", Type = "Huyện" },
+            new District { ProvinceId = hanoiId, Name = "Chương Mỹ", Type = "Huyện" },
+            new District { ProvinceId = hanoiId, Name = "Thanh Oai", Type = "Huyện" },
+            new District { ProvinceId = hanoiId, Name = "Thường Tín", Type = "Huyện" },
+            new District { ProvinceId = hanoiId, Name = "Phú Xuyên", Type = "Huyện" },
+            new District { ProvinceId = hanoiId, Name = "Ứng Hòa", Type = "Huyện" },
+            new District { ProvinceId = hanoiId, Name = "Mỹ Đức", Type = "Huyện" },
+
+            // TP HCM districts
+            new District { ProvinceId = hcmcId, Name = "Quận 1", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Quận 2", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Quận 3", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Quận 4", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Quận 5", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Quận 6", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Quận 7", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Quận 8", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Quận 9", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Quận 10", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Quận 11", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Quận 12", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Thủ Đức", Type = "Thành phố" },
+            new District { ProvinceId = hcmcId, Name = "Gò Vấp", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Bình Thạnh", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Tân Bình", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Tân Phú", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Phú Nhuận", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Bình Tân", Type = "Quận" },
+            new District { ProvinceId = hcmcId, Name = "Củ Chi", Type = "Huyện" },
+            new District { ProvinceId = hcmcId, Name = "Hóc Môn", Type = "Huyện" },
+            new District { ProvinceId = hcmcId, Name = "Bình Chánh", Type = "Huyện" },
+            new District { ProvinceId = hcmcId, Name = "Nhà Bè", Type = "Huyện" },
+            new District { ProvinceId = hcmcId, Name = "Cần Giờ", Type = "Huyện" },
+
+            // Đà Nẵng districts
+            new District { ProvinceId = danangId, Name = "Liên Chiểu", Type = "Quận" },
+            new District { ProvinceId = danangId, Name = "Thanh Khê", Type = "Quận" },
+            new District { ProvinceId = danangId, Name = "Hải Châu", Type = "Quận" },
+            new District { ProvinceId = danangId, Name = "Sơn Trà", Type = "Quận" },
+            new District { ProvinceId = danangId, Name = "Ngũ Hành Sơn", Type = "Quận" },
+            new District { ProvinceId = danangId, Name = "Cẩm Lệ", Type = "Quận" },
+            new District { ProvinceId = danangId, Name = "Hòa Vang", Type = "Huyện" },
+            new District { ProvinceId = danangId, Name = "Hoàng Sa", Type = "Huyện" }
+        };
+
+        context.Districts.AddRange(districts);
+        context.SaveChanges();
+    }
+
+    private static void SeedSystemPricing(EVDataMarketplaceDbContext context)
+    {
+        var pricings = new List<SystemPricing>
+        {
+            new SystemPricing
             {
-                FullName = "System Administrator",
-                Email = "admin@evdatamarket.com",
-                Password = adminPassword,
+                PackageType = "DataPackage",
+                Description = "Giá mua dữ liệu theo dòng - Data Package",
+                PricePerRow = 10.0M, // 10 VNĐ/dòng
+                ProviderCommissionPercent = 70.0M,
+                AdminCommissionPercent = 30.0M,
+                IsActive = true
+            },
+            new SystemPricing
+            {
+                PackageType = "SubscriptionPackage",
+                Description = "Gói subscription xem dashboard analytics",
+                PricePerRow = 0, // Not used for subscription
+                SubscriptionMonthlyBase = 500000.0M, // 500,000 VNĐ/tháng
+                ProviderCommissionPercent = 60.0M,
+                AdminCommissionPercent = 40.0M,
+                IsActive = true
+            },
+            new SystemPricing
+            {
+                PackageType = "APIPackage",
+                Description = "Gói API access với giới hạn số lượng calls",
+                PricePerRow = 0,
+                ApiPricePerCall = 100.0M, // 100 VNĐ/call
+                ProviderCommissionPercent = 65.0M,
+                AdminCommissionPercent = 35.0M,
+                IsActive = true
+            }
+        };
+
+        context.SystemPricings.AddRange(pricings);
+        context.SaveChanges();
+    }
+
+    private static void SeedUsers(EVDataMarketplaceDbContext context)
+    {
+        var users = new List<User>
+        {
+            new User
+            {
+                FullName = "Admin User",
+                Email = "admin@test.com",
+                Password = BCrypt.Net.BCrypt.HashPassword("Test123!"),
                 Role = "Admin",
-                Status = "Active",
-                CreatedAt = DateTime.Now
-            };
-            context.Users.Add(admin);
-            context.SaveChanges();
-        }
-
-        // Seed Moderator User
-        if (!context.Users.Any(u => u.Role == "Moderator"))
-        {
-            var moderatorPassword = BCrypt.Net.BCrypt.HashPassword("Moderator@123");
-            var moderator = new User
+                Status = "Active"
+            },
+            new User
             {
-                FullName = "Content Moderator",
-                Email = "moderator@evdatamarket.com",
-                Password = moderatorPassword,
+                FullName = "Moderator User",
+                Email = "moderator@test.com",
+                Password = BCrypt.Net.BCrypt.HashPassword("Test123!"),
                 Role = "Moderator",
+                Status = "Active"
+            },
+            new User
+            {
+                FullName = "VinFast Provider",
+                Email = "provider@test.com",
+                Password = BCrypt.Net.BCrypt.HashPassword("Test123!"),
+                Role = "DataProvider",
+                Status = "Active"
+            },
+            new User
+            {
+                FullName = "Consumer User",
+                Email = "consumer@test.com",
+                Password = BCrypt.Net.BCrypt.HashPassword("Test123!"),
+                Role = "DataConsumer",
+                Status = "Active"
+            }
+        };
+
+        context.Users.AddRange(users);
+        context.SaveChanges();
+
+        // Create DataProvider profile
+        var providerUser = context.Users.First(u => u.Email == "provider@test.com");
+        var hanoiProvince = context.Provinces.First(p => p.Name == "Hà Nội");
+        var provider = new DataProvider
+        {
+            UserId = providerUser.UserId,
+            CompanyName = "VinFast Charging Network",
+            CompanyWebsite = "https://vinfastauto.com",
+            ContactEmail = "provider@test.com",
+            ContactPhone = "+84123456789",
+            Address = "Vinhomes Ocean Park, Gia Lâm, Hà Nội",
+            ProvinceId = hanoiProvince.ProvinceId // Hà Nội
+        };
+        context.DataProviders.Add(provider);
+
+        // Create DataConsumer profile
+        var consumerUser = context.Users.First(u => u.Email == "consumer@test.com");
+        var consumer = new DataConsumer
+        {
+            UserId = consumerUser.UserId,
+            OrganizationName = "EV Research Institute",
+            ContactPerson = "Consumer User",
+            ContactNumber = "+84987654321",
+            BillingEmail = "billing@evresearch.com"
+        };
+        context.DataConsumers.Add(consumer);
+
+        context.SaveChanges();
+    }
+
+    private static void SeedSampleDatasets(EVDataMarketplaceDbContext context)
+    {
+        var provider = context.DataProviders.FirstOrDefault();
+        if (provider == null) return;
+
+        // Create 3 sample datasets
+        var datasets = new List<Dataset>
+        {
+            new Dataset
+            {
+                ProviderId = provider.ProviderId,
+                Name = "Hà Nội EV Charging Data - Q1 2024",
+                Description = "Dữ liệu sạc xe điện tại các trạm VinFast ở Hà Nội trong quý 1 năm 2024. Bao gồm thông tin về năng lượng tiêu thụ, thời gian sạc, và chi phí.",
+                Category = "EV Charging",
+                DataFormat = "CSV",
+                ModerationStatus = "Approved",
                 Status = "Active",
-                CreatedAt = DateTime.Now
-            };
-            context.Users.Add(moderator);
-            context.SaveChanges();
-        }
+                Visibility = "Public",
+                UploadDate = DateTime.Now.AddDays(-30),
+                RowCount = 0 // Will be updated after adding records
+            },
+            new Dataset
+            {
+                ProviderId = provider.ProviderId,
+                Name = "TP.HCM EV Charging Data - Q1 2024",
+                Description = "Dữ liệu sạc xe điện tại các trạm VinFast ở TP.HCM trong quý 1 năm 2024.",
+                Category = "EV Charging",
+                DataFormat = "CSV",
+                ModerationStatus = "Approved",
+                Status = "Active",
+                Visibility = "Public",
+                UploadDate = DateTime.Now.AddDays(-25),
+                RowCount = 0
+            },
+            new Dataset
+            {
+                ProviderId = provider.ProviderId,
+                Name = "Đà Nẵng EV Charging Data - Q1 2024",
+                Description = "Dữ liệu sạc xe điện tại các trạm VinFast ở Đà Nẵng trong quý 1 năm 2024.",
+                Category = "EV Charging",
+                DataFormat = "CSV",
+                ModerationStatus = "Approved",
+                Status = "Active",
+                Visibility = "Public",
+                UploadDate = DateTime.Now.AddDays(-20),
+                RowCount = 0
+            }
+        };
 
-        // Seed Pricing Tiers
-        if (!context.PricingTiers.Any())
+        context.Datasets.AddRange(datasets);
+        context.SaveChanges();
+
+        // Get province IDs
+        var hanoiId = context.Provinces.First(p => p.Name == "Hà Nội").ProvinceId;
+        var hcmcId = context.Provinces.First(p => p.Name == "Hồ Chí Minh").ProvinceId;
+        var danangId = context.Provinces.First(p => p.Name == "Đà Nẵng").ProvinceId;
+
+        // Get district IDs
+        var hanoiDistricts = context.Districts.Where(d => d.ProvinceId == hanoiId).Take(4).Select(d => d.DistrictId).ToArray();
+        var hcmcDistricts = context.Districts.Where(d => d.ProvinceId == hcmcId).Take(4).Select(d => d.DistrictId).ToArray();
+        var danangDistricts = context.Districts.Where(d => d.ProvinceId == danangId).Take(3).Select(d => d.DistrictId).ToArray();
+
+        // Add sample records for each dataset
+        SeedDatasetRecords(context, datasets[0].DatasetId, hanoiId, hanoiDistricts, 100); // Hanoi - 4 districts
+        SeedDatasetRecords(context, datasets[1].DatasetId, hcmcId, hcmcDistricts, 80); // HCMC - 4 districts
+        SeedDatasetRecords(context, datasets[2].DatasetId, danangId, danangDistricts, 60); // Danang - 3 districts
+
+        // Update row counts
+        foreach (var dataset in datasets)
         {
-            var pricingTiers = new List<PricingTier>
-            {
-                new PricingTier
-                {
-                    TierName = "Basic",
-                    Description = "Gói cơ bản cho dữ liệu thông thường",
-                    BasePricePerMb = 0.3m,
-                    ApiPricePerCall = 0.05m,
-                    SubscriptionPricePerRegion = 500m,
-                    ProviderCommissionPercent = 65m,
-                    AdminCommissionPercent = 35m,
-                    IsActive = true,
-                    CreatedAt = DateTime.Now,
-                    UpdatedAt = DateTime.Now
-                },
-                new PricingTier
-                {
-                    TierName = "Standard",
-                    Description = "Gói tiêu chuẩn cho dữ liệu chất lượng cao",
-                    BasePricePerMb = 0.5m,
-                    ApiPricePerCall = 0.1m,
-                    SubscriptionPricePerRegion = 1000m,
-                    ProviderCommissionPercent = 70m,
-                    AdminCommissionPercent = 30m,
-                    IsActive = true,
-                    CreatedAt = DateTime.Now,
-                    UpdatedAt = DateTime.Now
-                },
-                new PricingTier
-                {
-                    TierName = "Premium",
-                    Description = "Gói cao cấp cho dữ liệu real-time và phân tích sâu",
-                    BasePricePerMb = 1.0m,
-                    ApiPricePerCall = 0.2m,
-                    SubscriptionPricePerRegion = 2000m,
-                    ProviderCommissionPercent = 75m,
-                    AdminCommissionPercent = 25m,
-                    IsActive = true,
-                    CreatedAt = DateTime.Now,
-                    UpdatedAt = DateTime.Now
-                }
-            };
-            context.PricingTiers.AddRange(pricingTiers);
-            context.SaveChanges();
+            dataset.RowCount = context.DatasetRecords.Count(r => r.DatasetId == dataset.DatasetId);
         }
+        context.SaveChanges();
+    }
 
-        // Seed Sample Data Providers
-        if (!context.DataProviders.Any())
+    private static void SeedDatasetRecords(EVDataMarketplaceDbContext context, int datasetId, int provinceId, int[] districtIds, int recordsPerDistrict)
+    {
+        var random = new Random();
+        var records = new List<DatasetRecord>();
+        // Generate data for the last 90 days (recent data)
+        var startDate = DateTime.Now.AddDays(-90);
+
+        var stationNames = new[] { "VinFast Station A", "VinFast Station B", "VinFast Station C", "Public Charging Hub", "EV Plaza" };
+        var vehicleTypes = new[] { "VF8", "VF9", "VFe34", "Other EV" };
+        var operators = new[] { "VinFast", "EVN", "Petrolimex", "Shell" };
+
+        foreach (var districtId in districtIds)
         {
-            var providerUsers = new List<User>
+            for (int i = 0; i < recordsPerDistrict; i++)
             {
-                new User
+                var chargingDate = startDate.AddDays(random.Next(0, 90)).AddHours(random.Next(0, 24));
+                var energyKwh = Math.Round((decimal)(20 + random.NextDouble() * 60), 2); // 20-80 kWh
+                var voltage = 220 + random.Next(0, 20); // 220-240V
+                var current = Math.Round((decimal)(10 + random.NextDouble() * 30), 1); // 10-40A
+                var powerKw = Math.Round(voltage * current / 1000, 2);
+                var duration = random.Next(30, 180); // 30-180 minutes
+                var cost = Math.Round(energyKwh * (3000 + random.Next(-500, 500)), 0); // ~3000 VND/kWh
+                var socStart = random.Next(10, 40); // 10-40%
+                var socEnd = random.Next(70, 100); // 70-100%
+                var batteryCapacity = random.Next(60, 100); // 60-100 kWh
+
+                var stationId = $"STATION_{provinceId:00}_{districtId:00}_{(i % 5) + 1:00}";
+                var stationName = stationNames[i % stationNames.Length];
+                var address = $"Địa chỉ trạm {i + 1}, Quận/Huyện {districtId}";
+
+                records.Add(new DatasetRecord
                 {
-                    FullName = "VinFast Charging",
-                    Email = "provider1@vinfast.vn",
-                    Password = BCrypt.Net.BCrypt.HashPassword("Provider@123"),
-                    Role = "DataProvider",
-                    Status = "Active",
-                    CreatedAt = DateTime.Now
-                },
-                new User
-                {
-                    FullName = "EVN Charging Network",
-                    Email = "provider2@evn.vn",
-                    Password = BCrypt.Net.BCrypt.HashPassword("Provider@123"),
-                    Role = "DataProvider",
-                    Status = "Active",
-                    CreatedAt = DateTime.Now
-                },
-                new User
-                {
-                    FullName = "GreenCharge Vietnam",
-                    Email = "provider3@greencharge.vn",
-                    Password = BCrypt.Net.BCrypt.HashPassword("Provider@123"),
-                    Role = "DataProvider",
-                    Status = "Active",
-                    CreatedAt = DateTime.Now
-                }
-            };
-
-            context.Users.AddRange(providerUsers);
-            context.SaveChanges();
-
-            var provinces = context.Provinces.ToList();
-            var haNoi = provinces.First(p => p.Name == "Hà Nội");
-            var hcm = provinces.First(p => p.Name == "TP Hồ Chí Minh");
-            var daNang = provinces.First(p => p.Name == "Đà Nẵng");
-
-            var providers = new List<DataProvider>
-            {
-                new DataProvider
-                {
-                    UserId = providerUsers[0].UserId,
-                    CompanyName = "VinFast Charging",
-                    CompanyWebsite = "https://vinfastcharging.vn",
-                    ContactEmail = "provider1@vinfast.vn",
-                    ContactPhone = "0901234567",
-                    Address = "Hà Nội, Việt Nam",
-                    ProvinceId = haNoi.ProvinceId,
-                    CreatedAt = DateTime.Now
-                },
-                new DataProvider
-                {
-                    UserId = providerUsers[1].UserId,
-                    CompanyName = "EVN Charging Network",
-                    CompanyWebsite = "https://evncharging.vn",
-                    ContactEmail = "provider2@evn.vn",
-                    ContactPhone = "0902345678",
-                    Address = "TP Hồ Chí Minh, Việt Nam",
-                    ProvinceId = hcm.ProvinceId,
-                    CreatedAt = DateTime.Now
-                },
-                new DataProvider
-                {
-                    UserId = providerUsers[2].UserId,
-                    CompanyName = "GreenCharge Vietnam",
-                    CompanyWebsite = "https://greencharge.vn",
-                    ContactEmail = "provider3@greencharge.vn",
-                    ContactPhone = "0903456789",
-                    Address = "Đà Nẵng, Việt Nam",
-                    ProvinceId = daNang.ProvinceId,
-                    CreatedAt = DateTime.Now
-                }
-            };
-
-            context.DataProviders.AddRange(providers);
-            context.SaveChanges();
-
-            // Seed Sample Datasets
-            var standardTier = context.PricingTiers.First(t => t.TierName == "Standard");
-            var basicTier = context.PricingTiers.First(t => t.TierName == "Basic");
-
-            var datasets = new List<Dataset>
-            {
-                new Dataset
-                {
-                    ProviderId = providers[0].ProviderId,
-                    TierId = standardTier.TierId,
-                    Name = "Dữ liệu sạc xe điện Hà Nội Q1/2025",
-                    Description = "Dữ liệu chi tiết về các phiên sạc xe điện tại Hà Nội trong quý 1 năm 2025, bao gồm thời gian sạc, năng lượng tiêu thụ, loại xe",
-                    Category = "Charging Session",
-                    DataFormat = "CSV",
-                    DataSizeMb = 150.5m,
-                    UploadDate = DateTime.Now.AddDays(-5),
-                    LastUpdated = DateTime.Now.AddDays(-5),
-                    Status = "Active",
-                    Visibility = "Public",
-                    ModerationStatus = "Approved"
-                },
-                new Dataset
-                {
-                    ProviderId = providers[1].ProviderId,
-                    TierId = standardTier.TierId,
-                    Name = "Phân tích hiệu suất pin xe điện TP.HCM",
-                    Description = "Dữ liệu về trạng thái sức khỏe pin (SoH), tần suất sạc, và mức tiêu hao năng lượng của các xe điện tại TP.HCM",
-                    Category = "Battery Performance",
-                    DataFormat = "CSV",
-                    DataSizeMb = 200.3m,
-                    UploadDate = DateTime.Now.AddDays(-3),
-                    LastUpdated = DateTime.Now.AddDays(-3),
-                    Status = "Active",
-                    Visibility = "Public",
-                    ModerationStatus = "Approved"
-                },
-                new Dataset
-                {
-                    ProviderId = providers[2].ProviderId,
-                    TierId = basicTier.TierId,
-                    Name = "Dữ liệu trạm sạc Đà Nẵng 2024",
-                    Description = "Thông tin về vị trí, công suất, và tình trạng hoạt động của các trạm sạc xe điện tại Đà Nẵng",
-                    Category = "Charging Station",
-                    DataFormat = "CSV",
-                    DataSizeMb = 50.0m,
-                    UploadDate = DateTime.Now.AddDays(-7),
-                    LastUpdated = DateTime.Now.AddDays(-7),
-                    Status = "Active",
-                    Visibility = "Public",
-                    ModerationStatus = "Approved"
-                },
-                new Dataset
-                {
-                    ProviderId = providers[0].ProviderId,
-                    TierId = standardTier.TierId,
-                    Name = "Hành vi lái xe điện miền Bắc",
-                    Description = "Dữ liệu về thói quen lái xe, quãng đường di chuyển, và mức tiêu thụ năng lượng của người dùng xe điện khu vực miền Bắc",
-                    Category = "Driving Behavior",
-                    DataFormat = "CSV",
-                    DataSizeMb = 120.0m,
-                    UploadDate = DateTime.Now.AddDays(-1),
-                    LastUpdated = DateTime.Now.AddDays(-1),
-                    Status = "Pending",
-                    Visibility = "Private",
-                    ModerationStatus = "Pending"
-                }
-            };
-
-            context.Datasets.AddRange(datasets);
-            context.SaveChanges();
-        }
-
-        // Seed Sample Data Consumers
-        if (!context.DataConsumers.Any())
-        {
-            var consumerUsers = new List<User>
-            {
-                new User
-                {
-                    FullName = "Toyota Research Vietnam",
-                    Email = "consumer1@toyota.vn",
-                    Password = BCrypt.Net.BCrypt.HashPassword("Consumer@123"),
-                    Role = "DataConsumer",
-                    Status = "Active",
-                    CreatedAt = DateTime.Now
-                },
-                new User
-                {
-                    FullName = "EV Analytics Startup",
-                    Email = "consumer2@evanalytics.vn",
-                    Password = BCrypt.Net.BCrypt.HashPassword("Consumer@123"),
-                    Role = "DataConsumer",
-                    Status = "Active",
-                    CreatedAt = DateTime.Now
-                }
-            };
-
-            context.Users.AddRange(consumerUsers);
-            context.SaveChanges();
-
-            var consumers = new List<DataConsumer>
-            {
-                new DataConsumer
-                {
-                    UserId = consumerUsers[0].UserId,
-                    OrganizationName = "Toyota Research Vietnam",
-                    ContactPerson = "Nguyễn Văn A",
-                    ContactNumber = "0911111111",
-                    BillingEmail = "consumer1@toyota.vn",
-                    CreatedAt = DateTime.Now
-                },
-                new DataConsumer
-                {
-                    UserId = consumerUsers[1].UserId,
-                    OrganizationName = "EV Analytics Startup",
-                    ContactPerson = "Trần Thị B",
-                    ContactNumber = "0922222222",
-                    BillingEmail = "consumer2@evanalytics.vn",
-                    CreatedAt = DateTime.Now
-                }
-            };
-
-            context.DataConsumers.AddRange(consumers);
-            context.SaveChanges();
-
-            // Seed Sample DatasetRecords for testing
-            if (!context.DatasetRecords.Any())
-            {
-                var approvedDatasets = context.Datasets
-                    .Where(d => d.ModerationStatus == "Approved" && d.Status == "Active")
-                    .ToList();
-
-                var sampleRecords = new List<DatasetRecord>();
-
-                // Add sample records for each approved dataset
-                foreach (var dataset in approvedDatasets)
-                {
-                    for (int i = 0; i < 10; i++)
-                    {
-                        var recordData = $$"""
-                        {
-                            "session_id": "{{Guid.NewGuid()}}",
-                            "timestamp": "{{DateTime.Now.AddMinutes(-i * 15).ToString("yyyy-MM-dd HH:mm:ss")}}",
-                            "charging_station_id": "STATION-{{i + 1:000}}",
-                            "location": "{{dataset.Category}} Location {{i + 1}}",
-                            "energy_delivered_kwh": {{5.5 + i * 0.3}},
-                            "duration_minutes": {{20 + i * 2}},
-                            "vehicle_type": "EV{{i % 3 + 1}}",
-                            "battery_level_start": {{80 + i}},
-                            "battery_level_end": {{95 + i}},
-                            "temperature": {{25 + i * 0.5}},
-                            "payment_method": "{{(i % 2 == 0 ? "Credit Card" : "Subscription")}}",
-                            "cost": {{100000 + i * 5000}}
-                        }
-                        """;
-
-                        sampleRecords.Add(new DatasetRecord
-                        {
-                            DatasetId = dataset.DatasetId,
-                            RecordData = recordData,
-                            RowNumber = i + 1,
-                            CreatedAt = DateTime.Now.AddMinutes(-i * 15)
-                        });
-                    }
-                }
-
-                context.DatasetRecords.AddRange(sampleRecords);
-                context.SaveChanges();
+                    DatasetId = datasetId,
+                    StationId = stationId,
+                    StationName = stationName,
+                    StationAddress = address,
+                    StationOperator = operators[random.Next(operators.Length)],
+                    ProvinceId = provinceId,
+                    DistrictId = districtId,
+                    ChargingTimestamp = chargingDate,
+                    EnergyKwh = energyKwh,
+                    Voltage = voltage,
+                    Current = current,
+                    PowerKw = powerKw,
+                    DurationMinutes = duration,
+                    ChargingCost = cost,
+                    VehicleType = vehicleTypes[random.Next(vehicleTypes.Length)],
+                    BatteryCapacityKwh = batteryCapacity,
+                    SocStart = socStart,
+                    SocEnd = socEnd
+                });
             }
         }
+
+        context.DatasetRecords.AddRange(records);
+        context.SaveChanges();
     }
 }
