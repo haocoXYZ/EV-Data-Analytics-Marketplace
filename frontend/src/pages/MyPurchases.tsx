@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import ConsumerLayout from '../components/ConsumerLayout'
-import { datasetsApi, paymentsApi } from '../api'
-import { Dataset, Payment } from '../types'
+import { purchasesApi } from '../api'
+import { DataPackagePurchase, SubscriptionPackagePurchase, APIPackagePurchase } from '../types'
 
 export default function MyPurchases() {
-  const [purchases, setPurchases] = useState<any[]>([])
-  const [payments, setPayments] = useState<any[]>([])
+  const [dataPackages, setDataPackages] = useState<DataPackagePurchase[]>([])
+  const [subscriptions, setSubscriptions] = useState<SubscriptionPackagePurchase[]>([])
+  const [apiPackages, setApiPackages] = useState<APIPackagePurchase[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'datasets' | 'payments'>('datasets')
+  const [activeTab, setActiveTab] = useState<'dataPackages' | 'subscriptions' | 'apiPackages'>('dataPackages')
   const [downloading, setDownloading] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     loadData()
@@ -18,66 +20,63 @@ export default function MyPurchases() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [purchaseData, paymentHistory] = await Promise.all([
-        datasetsApi.getMyPurchases(),
-        paymentsApi.getMy()
-      ])
-      // Backend returns: { oneTimePurchases: [...], subscriptions: [...], apiPackages: [...] }
-      // Extract all purchases into a flat array
-      const allPurchases = [
-        ...(purchaseData.oneTimePurchases || []),
-        ...(purchaseData.subscriptions || []),
-        ...(purchaseData.apiPackages || [])
-      ]
-      setPurchases(allPurchases)
-      setPayments(paymentHistory)
-    } catch (error) {
+      setError(null)
+      const data = await purchasesApi.getMy()
+      setDataPackages(data.dataPackages || [])
+      setSubscriptions(data.subscriptions || [])
+      setApiPackages(data.apiPackages || [])
+    } catch (error: any) {
       console.error('Failed to load data:', error)
+      setError(error.response?.data?.message || error.message || 'Failed to load purchases')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleDownload = async (datasetId: number, datasetName: string) => {
-    setDownloading(datasetId)
+  const handleDownload = async (purchaseId: number) => {
+    setDownloading(purchaseId)
     try {
-      const blob = await datasetsApi.download(datasetId)
+      const blob = await purchasesApi.downloadDataPackage(purchaseId)
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${datasetName.replace(/\s+/g, '_')}.csv`
+      a.download = `data_package_${purchaseId}.csv`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
       
-      // Reload to update download count
-      await loadData()
+      alert('Data package downloaded successfully!')
     } catch (error: any) {
-      alert('Lỗi download: ' + error.message)
+      alert('Download failed: ' + (error.response?.data?.message || error.message))
     } finally {
       setDownloading(null)
     }
   }
 
-  const handleCheckPaymentStatus = async (paymentId: number) => {
+  const handleCancelSubscription = async (subscriptionId: number) => {
+    if (!confirm('Are you sure you want to cancel this subscription?')) {
+      return
+    }
+
     try {
-      const result = await paymentsApi.checkStatus(paymentId)
-      alert(result.message || 'Payment status checked')
+      await purchasesApi.cancelSubscription(subscriptionId)
+      alert('Subscription cancelled successfully')
       await loadData()
     } catch (error: any) {
-      alert('Lỗi: ' + error.message)
+      alert('Cancel failed: ' + (error.response?.data?.message || error.message))
     }
   }
 
-  const getPaymentStatusColor = (status: string) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'Completed':
+      case 'Active':
         return 'bg-green-100 text-green-700 border-green-200'
       case 'Pending':
         return 'bg-yellow-100 text-yellow-700 border-yellow-200'
-      case 'Failed':
-        return 'bg-red-100 text-red-700 border-red-200'
+      case 'Cancelled':
+      case 'Expired':
+        return 'bg-gray-100 text-gray-700 border-gray-200'
       default:
         return 'bg-gray-100 text-gray-700 border-gray-200'
     }
@@ -89,8 +88,8 @@ export default function MyPurchases() {
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-12">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h1 className="text-4xl font-bold mb-3">B6: Datasets của tôi</h1>
-            <p className="text-blue-100 text-lg">Quản lý datasets đã mua và lịch sử thanh toán</p>
+            <h1 className="text-4xl font-bold mb-3">📦 My Purchases</h1>
+            <p className="text-blue-100 text-lg">Manage your data packages, subscriptions, and API access</p>
           </div>
         </div>
 
@@ -99,221 +98,84 @@ export default function MyPurchases() {
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 mb-6">
             <div className="flex border-b border-gray-200">
               <button
-                onClick={() => setActiveTab('datasets')}
+                onClick={() => setActiveTab('dataPackages')}
                 className={`flex-1 px-6 py-4 font-semibold transition-colors ${
-                  activeTab === 'datasets'
+                  activeTab === 'dataPackages'
                     ? 'text-blue-600 border-b-2 border-blue-600'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                📁 Datasets đã mua ({purchases.length})
+                📥 Data Packages ({dataPackages.length})
               </button>
               <button
-                onClick={() => setActiveTab('payments')}
+                onClick={() => setActiveTab('subscriptions')}
                 className={`flex-1 px-6 py-4 font-semibold transition-colors ${
-                  activeTab === 'payments'
+                  activeTab === 'subscriptions'
                     ? 'text-blue-600 border-b-2 border-blue-600'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                💳 Lịch sử thanh toán ({payments.length})
+                🔄 Subscriptions ({subscriptions.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('apiPackages')}
+                className={`flex-1 px-6 py-4 font-semibold transition-colors ${
+                  activeTab === 'apiPackages'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                🔌 API Packages ({apiPackages.length})
               </button>
             </div>
 
-            {/* Datasets Tab */}
-            {activeTab === 'datasets' && (
+            {/* Data Packages Tab */}
+            {activeTab === 'dataPackages' && (
               <div className="p-6">
                 {loading ? (
                   <div className="text-center py-12">
                     <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-                    <p className="text-gray-600 mt-4">Đang tải...</p>
+                    <p className="text-gray-600 mt-4">Loading...</p>
                   </div>
-                ) : purchases.length > 0 ? (
-                  <div className="space-y-4">
-                    {purchases.map((item) => {
-                      const datasetName = item.dataset?.name || item.Dataset?.name || 'Unknown'
-                      const datasetId = item.datasetId || item.Dataset?.datasetId
-                      const purchaseType = item.PurchaseType || 'OneTime'
-                      const purchaseId = item.otpId || item.subId || item.apiId
-                      
-                      return (
-                        <div key={purchaseId} className="bg-gray-50 rounded-xl p-6 border border-gray-200 hover:border-blue-300 transition-colors">
-                          <div className="flex items-start justify-between mb-4">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-2">
-                                <h3 className="text-xl font-bold text-gray-900">{datasetName}</h3>
-                                <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
-                                  {item.dataset?.category || item.Dataset?.category}
-                                </span>
-                                <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                                  purchaseType === 'OneTime' ? 'bg-green-100 text-green-700' :
-                                  purchaseType === 'Subscription' ? 'bg-purple-100 text-purple-700' :
-                                  'bg-orange-100 text-orange-700'
-                                }`}>
-                                  {purchaseType === 'OneTime' ? '📥 One-Time' : 
-                                   purchaseType === 'Subscription' ? '🔄 Subscription' : '🔌 API Package'}
-                                </span>
-                              </div>
-                              <p className="text-gray-600 text-sm line-clamp-2 mb-3">
-                                {item.dataset?.description || item.Dataset?.description}
-                              </p>
-                              
-                              <div className="flex flex-wrap gap-4 text-sm">
-                                <div className="flex items-center gap-1 text-gray-500">
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                  Mua: {new Date(
-                                    item.purchase?.purchaseDate || 
-                                    item.purchaseDetails?.purchaseDate ||
-                                    Date.now()
-                                  ).toLocaleDateString('vi-VN')}
-                                </div>
-                                <div className="flex items-center gap-1 text-gray-500">
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                                  </svg>
-                                  {(item.dataset?.dataSizeMb || item.Dataset?.dataSizeMb)?.toFixed(2)} MB
-                                </div>
-                                {purchaseType === 'OneTime' && (
-                                  <div className="flex items-center gap-1 text-gray-500">
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                    </svg>
-                                    Downloads: {item.purchaseDetails?.downloadCount || 0}/{item.purchaseDetails?.maxDownload || 5}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {purchaseType === 'OneTime' && (
-                              <div className="flex flex-col gap-2 ml-4">
-                                <button
-                                  onClick={() => handleDownload(datasetId, datasetName)}
-                                  disabled={downloading === datasetId || item.purchaseDetails?.downloadCount >= item.purchaseDetails?.maxDownload}
-                                  className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-2 rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                                >
-                                  {downloading === datasetId ? (
-                                    <span className="flex items-center gap-2">
-                                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                      </svg>
-                                      Downloading...
-                                    </span>
-                                  ) : (
-                                    <span className="flex items-center gap-2">
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                      </svg>
-                                      Download CSV
-                                    </span>
-                                  )}
-                                </button>
-
-                                <Link
-                                  to={`/dataset/${datasetId}`}
-                                  className="bg-gray-100 text-gray-700 px-6 py-2 rounded-lg font-semibold hover:bg-gray-200 transition-colors text-center whitespace-nowrap"
-                                >
-                                  Chi tiết
-                                </Link>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Purchase Details */}
-                          <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-3 gap-4 text-sm">
-                            <div>
-                              <div className="text-gray-600 mb-1">Giá đã trả</div>
-                              <div className="font-bold text-gray-900">
-                                {(item.purchaseDetails?.totalPrice || item.totalPrice)?.toLocaleString('vi-VN')} đ
-                              </div>
-                            </div>
-                            <div>
-                              <div className="text-gray-600 mb-1">Loại</div>
-                              <div className="font-medium text-gray-900">
-                                {item.purchaseDetails?.licenseType || purchaseType}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="text-gray-600 mb-1">Trạng thái</div>
-                              <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getPaymentStatusColor(item.status || item.purchaseDetails?.status)}`}>
-                                {item.status || item.purchaseDetails?.status}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                      </svg>
-                    </div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">Chưa có datasets nào</h3>
-                    <p className="text-gray-600 mb-6">Khám phá và mua datasets ngay</p>
-                    <Link
-                      to="/catalog"
-                      className="inline-block bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all"
-                    >
-                      Khám phá Datasets →
-                    </Link>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Payments Tab */}
-            {activeTab === 'payments' && (
-              <div className="p-6">
-                {loading ? (
-                  <div className="text-center py-12">
-                    <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-                    <p className="text-gray-600 mt-4">Đang tải...</p>
-                  </div>
-                ) : payments.length > 0 ? (
+                ) : dataPackages.length > 0 ? (
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Payment ID</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Loại</th>
-                          <th className="text-right py-3 px-4 font-semibold text-gray-700 text-sm">Số tiền</th>
-                          <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">Ngày</th>
-                          <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">Trạng thái</th>
-                          <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">Hành động</th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Purchase ID</th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Province</th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">District</th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Date Range</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-700 text-sm">Records</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-700 text-sm">Price</th>
+                          <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">Status</th>
+                          <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {payments.map((payment) => (
-                          <tr key={payment.paymentId} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="py-3 px-4 font-mono text-sm">#{payment.paymentId}</td>
-                            <td className="py-3 px-4">
-                              <span className="text-sm font-medium text-gray-700">{payment.paymentType}</span>
+                        {dataPackages.map((item) => (
+                          <tr key={item.purchaseId} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="py-3 px-4 font-mono text-sm">#{item.purchaseId}</td>
+                            <td className="py-3 px-4 text-gray-700">{item.provinceName}</td>
+                            <td className="py-3 px-4 text-gray-700">{item.districtName || 'All'}</td>
+                            <td className="py-3 px-4 text-sm text-gray-600">
+                              {new Date(item.startDate).toLocaleDateString()} - {new Date(item.endDate).toLocaleDateString()}
                             </td>
-                            <td className="py-3 px-4 text-right font-semibold text-gray-900">
-                              {payment.amount?.toLocaleString('vi-VN')} đ
-                            </td>
-                            <td className="py-3 px-4 text-center text-sm text-gray-600">
-                              {new Date(payment.paymentDate).toLocaleDateString('vi-VN')}
-                            </td>
+                            <td className="py-3 px-4 text-right font-medium text-gray-900">{(item.rowCount || 0).toLocaleString()}</td>
+                            <td className="py-3 px-4 text-right font-semibold text-gray-900">{(item.totalPrice || 0).toLocaleString()} đ</td>
                             <td className="py-3 px-4 text-center">
-                              <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getPaymentStatusColor(payment.status)}`}>
-                                {payment.status}
+                              <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusBadge(item.status)}`}>
+                                {item.status}
                               </span>
                             </td>
                             <td className="py-3 px-4 text-center">
-                              {payment.status === 'Pending' && (
-                                <button
-                                  onClick={() => handleCheckPaymentStatus(payment.paymentId)}
-                                  className="text-blue-600 hover:text-blue-700 font-medium text-sm"
-                                >
-                                  Kiểm tra
-                                </button>
-                              )}
+                              <button
+                                onClick={() => handleDownload(item.purchaseId)}
+                                disabled={downloading === item.purchaseId || item.status !== 'Active'}
+                                className="text-blue-600 hover:text-blue-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {downloading === item.purchaseId ? 'Downloading...' : 'Download CSV'}
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -324,11 +186,156 @@ export default function MyPurchases() {
                   <div className="text-center py-12">
                     <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                       <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                       </svg>
                     </div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">Chưa có giao dịch nào</h3>
-                    <p className="text-gray-600">Lịch sử thanh toán sẽ hiển thị ở đây</p>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">No Data Packages</h3>
+                    <p className="text-gray-600 mb-6">Purchase location-based data packages</p>
+                    <Link
+                      to="/buy-data"
+                      className="inline-block bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all"
+                    >
+                      Buy Data Package →
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Subscriptions Tab */}
+            {activeTab === 'subscriptions' && (
+              <div className="p-6">
+                {loading ? (
+                  <div className="text-center py-12">
+                    <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                    <p className="text-gray-600 mt-4">Loading...</p>
+                  </div>
+                ) : subscriptions.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">ID</th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Province</th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Billing Cycle</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-700 text-sm">Price</th>
+                          <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">Status</th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Next Billing</th>
+                          <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {subscriptions.map((item) => (
+                          <tr key={item.subscriptionId} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="py-3 px-4 font-mono text-sm">#{item.subscriptionId}</td>
+                            <td className="py-3 px-4 text-gray-700">{item.provinceName}</td>
+                            <td className="py-3 px-4 text-gray-700">{item.billingCycle || 'N/A'}</td>
+                            <td className="py-3 px-4 text-right font-semibold text-gray-900">{(item.monthlyPrice || 0).toLocaleString()} đ</td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusBadge(item.status)}`}>
+                                {item.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-sm text-gray-600">
+                              {item.nextBillingDate ? new Date(item.nextBillingDate).toLocaleDateString() : 'N/A'}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <div className="flex items-center justify-center gap-2">
+                                <Link
+                                  to={`/subscriptions/${item.subscriptionId}/dashboard`}
+                                  className="text-blue-600 hover:text-blue-700 font-medium text-sm"
+                                >
+                                  View Dashboard
+                                </Link>
+                                {item.status === 'Active' && (
+                                  <>
+                                    <span className="text-gray-300">|</span>
+                                    <button
+                                      onClick={() => handleCancelSubscription(item.subscriptionId)}
+                                      className="text-red-600 hover:text-red-700 font-medium text-sm"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">No Subscriptions</h3>
+                    <p className="text-gray-600">Subscribe for real-time dashboard access</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* API Packages Tab */}
+            {activeTab === 'apiPackages' && (
+              <div className="p-6">
+                {loading ? (
+                  <div className="text-center py-12">
+                    <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                    <p className="text-gray-600 mt-4">Loading...</p>
+                  </div>
+                ) : apiPackages.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">ID</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-700 text-sm">API Calls</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-700 text-sm">Used</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-700 text-sm">Remaining</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-700 text-sm">Price</th>
+                          <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">Status</th>
+                          <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {apiPackages.map((item) => (
+                          <tr key={item.purchaseId} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="py-3 px-4 font-mono text-sm">#{item.purchaseId}</td>
+                            <td className="py-3 px-4 text-right font-medium text-gray-900">{(item.totalAPICalls || 0).toLocaleString()}</td>
+                            <td className="py-3 px-4 text-right text-orange-600 font-medium">{(item.apiCallsUsed || 0).toLocaleString()}</td>
+                            <td className="py-3 px-4 text-right text-green-600 font-medium">{(item.apiCallsRemaining || 0).toLocaleString()}</td>
+                            <td className="py-3 px-4 text-right font-semibold text-gray-900">{(item.totalPrice || 0).toLocaleString()} đ</td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusBadge(item.status)}`}>
+                                {item.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <Link
+                                to={`/api-packages/${item.purchaseId}/keys`}
+                                className="text-blue-600 hover:text-blue-700 font-medium text-sm"
+                              >
+                                Manage Keys
+                              </Link>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">No API Packages</h3>
+                    <p className="text-gray-600">Purchase API access for programmatic data retrieval</p>
                   </div>
                 )}
               </div>
@@ -337,23 +344,23 @@ export default function MyPurchases() {
 
           {/* Info Card */}
           <div className="bg-blue-50 rounded-2xl p-6 border border-blue-200">
-            <h3 className="font-bold text-blue-900 mb-3">💡 Hướng dẫn sử dụng</h3>
+            <h3 className="font-bold text-blue-900 mb-3">💡 Purchase Guide</h3>
             <ul className="space-y-2 text-sm text-blue-800">
               <li className="flex items-start gap-2">
                 <span>•</span>
-                <span>Datasets đã mua: Click "Download CSV" để tải file về máy</span>
+                <span><strong>Data Packages:</strong> One-time purchase of historical data by location</span>
               </li>
               <li className="flex items-start gap-2">
                 <span>•</span>
-                <span>Download limit: Mỗi dataset có thể tải tối đa 5 lần</span>
+                <span><strong>Subscriptions:</strong> Real-time dashboard access with auto-renewal</span>
               </li>
               <li className="flex items-start gap-2">
                 <span>•</span>
-                <span>Payment Pending: Click "Kiểm tra" để cập nhật trạng thái sau khi thanh toán</span>
+                <span><strong>API Packages:</strong> Programmatic access with API keys and call limits</span>
               </li>
               <li className="flex items-start gap-2">
                 <span>•</span>
-                <span>License: Research (nghiên cứu) hoặc Commercial (thương mại)</span>
+                <span>All prices in Vietnamese Dong (đ)</span>
               </li>
             </ul>
           </div>

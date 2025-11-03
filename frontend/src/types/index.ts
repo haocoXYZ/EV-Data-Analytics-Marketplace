@@ -43,125 +43,229 @@ export interface DatasetCreateRequest {
   name: string
   description?: string
   category?: string
-  tierId?: number
-  dataFormat?: string
 }
 
 export interface Dataset {
   datasetId: number
   providerId?: number
   providerName?: string
-  name?: string
+  companyName?: string
+  name: string
   description?: string
   category?: string
-  dataFormat?: string
-  dataSizeMb?: number
-  uploadDate?: string
-  status?: string
-  moderationStatus?: string
-  tierName?: string
-  basePricePerMb?: number
-  apiPricePerCall?: number
-  subscriptionPricePerRegion?: number
+  rowCount: number
+  uploadDate: string
+  lastUpdated?: string
+  status: string
+  moderationStatus: string
+  provider?: {
+    providerId: number
+    companyName: string
+    contactEmail?: string
+  }
 }
 
-// ============= PURCHASE TYPES =============
-
-export interface OneTimePurchaseRequest {
-  datasetId: number
-  startDate: string
-  endDate: string
-  licenseType: string
+export interface DatasetRecord {
+  recordId: number
+  stationId: string
+  stationName: string
+  stationAddress?: string
+  stationOperator?: string
+  provinceName: string
+  districtName: string
+  chargingTimestamp: string
+  energyKwh: number
+  voltage: number
+  current: number
+  powerKw: number
+  durationMinutes: number
+  chargingCost: number
+  vehicleType?: string
+  batteryCapacityKwh?: number
+  socStart?: number
+  socEnd?: number
+  dataSource?: string
 }
 
-export interface SubscriptionRequest {
-  datasetId: number
+// ============= PURCHASE TYPES (NEW MODEL) =============
+
+// Data Package Purchase
+export interface DataPackagePurchaseRequest {
   provinceId: number
-  renewalCycle: string
-  durationMonths: number
-}
-
-export interface APIPackageRequest {
-  datasetId: number
-  apiCallsCount: number
-}
-
-export interface Purchase {
-  purchaseId: number
-  consumerId: number
-  datasetId: number
-  datasetName?: string
-  purchaseType: string
-  amount: number
-  purchaseDate: string
-  purchaseStatus: string
+  districtId?: number
   startDate?: string
   endDate?: string
-  licenseType?: string
+}
+
+export interface DataPackagePurchase {
+  purchaseId: number
+  consumerId: number
+  provinceId: number
+  provinceName: string
+  districtId?: number
+  districtName?: string
+  startDate: string
+  endDate: string
+  rowCount: number
+  totalPrice: number
+  status: string
+  purchaseDate: string
+}
+
+// Subscription Package Purchase
+export interface SubscriptionPurchaseRequest {
+  provinceId: number
+  districtId?: number
+  billingCycle: 'Monthly' | 'Quarterly' | 'Yearly'
+}
+
+export interface SubscriptionPackagePurchase {
+  subscriptionId: number
+  consumerId: number
+  provinceId: number
+  provinceName: string
+  districtId?: number
+  districtName?: string
+  billingCycle: string
+  monthlyPrice: number
+  status: string
+  startDate: string
+  endDate?: string
+  nextBillingDate?: string
+  autoRenew: boolean
+}
+
+// API Package Purchase
+export interface APIPackagePurchaseRequest {
+  numberOfCalls: number
+  provinceId?: number
+  districtId?: number
+}
+
+export interface APIPackagePurchase {
+  purchaseId: number
+  consumerId: number
+  totalAPICalls: number
+  apiCallsUsed: number
+  apiCallsRemaining: number
+  pricePerCall: number
+  totalPrice: number
+  status: string
+  purchaseDate: string
+  expiryDate?: string
+  provinceId?: number
+  districtId?: number
+}
+
+// Combined purchases response
+export interface MyPurchasesResponse {
+  dataPackages: DataPackagePurchase[]
+  subscriptions: SubscriptionPackagePurchase[]
+  apiPackages: APIPackagePurchase[]
+}
+
+// Preview response
+export interface DataPackagePreview {
+  provinceId: number
+  provinceName: string
+  districtId?: number
+  districtName?: string
+  totalRecords: number
+  dateRange: {
+    startDate: string
+    endDate: string
+  }
+  pricePerRow: number
+  totalPrice: number
+  sampleRecords: DatasetRecord[]
 }
 
 // ============= PAYMENT TYPES =============
 
 export interface PaymentCreateRequest {
-  paymentType: string
+  paymentType: 'DataPackage' | 'SubscriptionPackage' | 'APIPackage'
   referenceId: number
 }
 
 export interface PaymentResponse {
   paymentId: number
-  payosOrderId?: string
-  checkoutUrl?: string
-  qrCode?: string
-  amount?: number
-  status?: string
+  checkoutUrl: string
+  amount: number
+  status: string
 }
 
 export interface Payment {
   paymentId: number
-  consumerId: number
   amount: number
-  paymentDate: string
-  paymentStatus: string
-  paymentMethod?: string
-  transactionRef?: string
+  status: string
+  paymentType: string
+  referenceId: number
+  paymentDate?: string
+  orderCode?: string
 }
 
-// ============= PRICING TYPES =============
+// ============= PRICING TYPES (NEW SYSTEM PRICING) =============
 
-export interface PricingTier {
-  tierId: number
-  tierName: string
-  description?: string
-  basePricePerMb?: number
+export interface SystemPricing {
+  pricingId: number
+  packageType: 'DataPackage' | 'SubscriptionPackage' | 'APIPackage'
+  pricePerRow?: number
+  subscriptionMonthlyBase?: number
   apiPricePerCall?: number
-  subscriptionPricePerRegion?: number
-  providerCommissionPercent?: number
-  adminCommissionPercent?: number
+  providerCommissionPercent: number
+  adminCommissionPercent: number
   isActive: boolean
+  createdAt: string
+  updatedAt: string
 }
 
-export interface PricingTierCreate {
-  tierName: string
-  description?: string
-  basePricePerMb?: number
+export interface SystemPricingUpdate {
+  pricePerRow?: number
+  subscriptionMonthlyBase?: number
   apiPricePerCall?: number
-  subscriptionPricePerRegion?: number
   providerCommissionPercent: number
   adminCommissionPercent: number
 }
 
 // ============= MODERATION TYPES =============
 
-export interface DatasetModeration {
-  datasetId: number
-  moderationStatus: 'Approved' | 'Rejected'
+export interface ModerationActionDto {
   comments?: string
 }
 
-export interface DatasetModerationRequest {
+export interface DatasetModerationDetail {
   datasetId: number
+  name: string
+  description?: string
+  category?: string
+  rowCount: number
+  uploadDate: string
+  lastUpdated?: string
+  status: string
   moderationStatus: string
-  comments?: string
+  provider: {
+    providerId: number
+    companyName: string
+    contactEmail: string
+    contactPhone?: string
+  }
+  moderationHistory: {
+    moderationId: number
+    reviewDate: string
+    status: string
+    comments?: string
+    moderatorName?: string
+  }[]
+}
+
+export interface DataPreviewResponse {
+  datasetId: number
+  datasetName: string
+  totalRecords: number
+  currentPage: number
+  pageSize: number
+  totalPages: number
+  records: DatasetRecord[]
 }
 
 // ============= PAYOUT TYPES =============
@@ -202,6 +306,78 @@ export interface CompletePayoutRequest {
   notes?: string
 }
 
+export interface ProviderEarnings {
+  providerId: number
+  providerName: string
+  totalEarnings: number
+  pendingPayouts: number
+  completedPayouts: number
+  revenueShares: RevenueShare[]
+  payouts: Payout[]
+}
+
+export interface RevenueShare {
+  shareId: number
+  paymentId: number
+  purchaseType: string
+  purchaseDate: string
+  providerShare: number
+  adminShare: number
+  status: string
+}
+
+// ============= API KEY TYPES =============
+
+export interface APIKey {
+  keyId: number
+  apiKey: string
+  keyName?: string
+  createdAt: string
+  lastUsedAt?: string
+  isActive: boolean
+}
+
+export interface APIKeyGenerateRequest {
+  keyName?: string
+}
+
+// ============= SUBSCRIPTION DASHBOARD TYPES =============
+
+export interface SubscriptionDashboardData {
+  subscriptionId: number
+  provinceName: string
+  districtName?: string
+  totalStations: number
+  totalEnergyKwh: number
+  averageChargingDuration: number
+  totalChargingSessions: number
+  dateRange: {
+    startDate: string
+    endDate: string
+  }
+}
+
+export interface ChartDataPoint {
+  label: string
+  value: number
+  date?: string
+}
+
+// ============= LOCATION TYPES =============
+
+export interface Province {
+  provinceId: number
+  name: string
+  code: string
+}
+
+export interface District {
+  districtId: number
+  provinceId: number
+  name: string
+  code: string
+}
+
 // ============= COMMON TYPES =============
 
 export interface ApiError {
@@ -216,4 +392,3 @@ export interface PaginatedResponse<T> {
   totalCount: number
   totalPages: number
 }
-

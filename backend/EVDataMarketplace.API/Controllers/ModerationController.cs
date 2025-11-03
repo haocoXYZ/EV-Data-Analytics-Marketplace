@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using EVDataMarketplace.API.Data;
 using EVDataMarketplace.API.Models;
 using System.Security.Claims;
+using System.Text;
 
 namespace EVDataMarketplace.API.Controllers;
 
@@ -162,6 +163,61 @@ public class ModerationController : ControllerBase
             totalPages = (int)Math.Ceiling((double)totalRecords / pageSize),
             records
         });
+    }
+
+    /// <summary>
+    /// Download dataset as CSV for review
+    /// </summary>
+    [HttpGet("{datasetId}/download")]
+    public async Task<IActionResult> DownloadDataset(int datasetId)
+    {
+        var dataset = await _context.Datasets.FindAsync(datasetId);
+        if (dataset == null)
+        {
+            return NotFound(new { message = "Dataset not found" });
+        }
+
+        var records = await _context.DatasetRecords
+            .Include(r => r.Province)
+            .Include(r => r.District)
+            .Where(r => r.DatasetId == datasetId)
+            .OrderBy(r => r.ChargingTimestamp)
+            .ToListAsync();
+
+        if (records.Count == 0)
+        {
+            return NotFound(new { message = "No records found for this dataset" });
+        }
+
+        // Generate CSV content
+        var csv = new StringBuilder();
+        
+        // Header
+        csv.AppendLine("StationId,StationName,StationAddress,StationOperator,Province,District,ChargingTimestamp,EnergyKwh,Voltage,Current,PowerKw,DurationMinutes,ChargingCost,VehicleType,BatteryCapacityKwh,SocStart,SocEnd,DataSource");
+
+        // Data rows
+        foreach (var record in records)
+        {
+            csv.AppendLine($"{record.StationId},{EscapeCsv(record.StationName)},{EscapeCsv(record.StationAddress)},{EscapeCsv(record.StationOperator)},{EscapeCsv(record.Province?.Name ?? "")},{EscapeCsv(record.District?.Name ?? "")},{record.ChargingTimestamp:yyyy-MM-dd HH:mm:ss},{record.EnergyKwh},{record.Voltage},{record.Current},{record.PowerKw},{record.DurationMinutes},{record.ChargingCost},{EscapeCsv(record.VehicleType)},{record.BatteryCapacityKwh},{record.SocStart},{record.SocEnd},{EscapeCsv(record.DataSource)}");
+        }
+
+        var bytes = Encoding.UTF8.GetBytes(csv.ToString());
+        var fileName = $"{dataset.Name.Replace(" ", "_")}_{DateTime.Now:yyyyMMdd}.csv";
+
+        return File(bytes, "text/csv", fileName);
+    }
+
+    private string EscapeCsv(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "";
+
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+        {
+            return $"\"{value.Replace("\"", "\"\"")}\"";
+        }
+
+        return value;
     }
 
     /// <summary>

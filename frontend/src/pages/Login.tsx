@@ -111,14 +111,44 @@ export default function Login() {
 
         {/* Demo Accounts */}
         <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-sm font-semibold text-blue-900 mb-2">🧪 Tài khoản demo:</p>
-            <div className="text-xs text-blue-800 space-y-1">
-              <div><strong>Admin:</strong> <code className="bg-blue-100 px-2 py-0.5 rounded">admin@evdatamarket.com</code></div>
-              <div><strong>Moderator:</strong> <code className="bg-blue-100 px-2 py-0.5 rounded">moderator@evdatamarket.com</code></div>
-              <div><strong>Provider:</strong> <code className="bg-blue-100 px-2 py-0.5 rounded">provider1@vinfast.vn</code></div>
-              <div><strong>Consumer:</strong> <code className="bg-blue-100 px-2 py-0.5 rounded">consumer1@toyota.vn</code></div>
-              <div className="pt-1"><strong>Password (tất cả):</strong> <code className="bg-blue-100 px-2 py-0.5 rounded">Test123!</code></div>
-            </div>
+          <p className="text-sm font-semibold text-blue-900 mb-3">🧪 Tài khoản demo:</p>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => { setEmail('admin@test.com'); setPassword('Test123!') }}
+              className="w-full text-left px-3 py-2 bg-white hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
+            >
+              <div className="text-xs font-semibold text-blue-900">Admin</div>
+              <div className="text-xs text-blue-700">admin@test.com</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setEmail('moderator@test.com'); setPassword('Test123!') }}
+              className="w-full text-left px-3 py-2 bg-white hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
+            >
+              <div className="text-xs font-semibold text-blue-900">Moderator</div>
+              <div className="text-xs text-blue-700">moderator@test.com</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setEmail('provider@test.com'); setPassword('Test123!') }}
+              className="w-full text-left px-3 py-2 bg-white hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
+            >
+              <div className="text-xs font-semibold text-blue-900">Provider</div>
+              <div className="text-xs text-blue-700">provider@test.com</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setEmail('consumer@test.com'); setPassword('Test123!') }}
+              className="w-full text-left px-3 py-2 bg-white hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
+            >
+              <div className="text-xs font-semibold text-blue-900">Consumer</div>
+              <div className="text-xs text-blue-700">consumer@test.com</div>
+            </button>
+          </div>
+          <div className="mt-2 text-xs text-blue-800 text-center">
+            Tất cả dùng password: <code className="bg-blue-100 px-2 py-0.5 rounded">Test123!</code>
+          </div>
         </div>
 
         {/* Register Link */}

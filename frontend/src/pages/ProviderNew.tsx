@@ -1,50 +1,54 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ProviderLayout from '../components/ProviderLayout'
-import { pricingApi, datasetsApi } from '../api'
-import { PricingTier } from '../types'
+import { datasetsApi } from '../api'
 
 export default function ProviderNew() {
   const navigate = useNavigate()
-  const [pricingTiers, setPricingTiers] = useState<any[]>([])
   const [uploading, setUploading] = useState(false)
   const [file, setFile] = useState<File | null>(null)
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false)
   
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    category: '',
-    tierId: '',
-    dataFormat: 'CSV'
+    category: ''
   })
 
   const categories = [
-    'Charging Stations',
-    'Battery Data',
-    'Routing',
+    'Charging Station Data',
+    'Vehicle Data',
     'Infrastructure',
-    'Grid Impact',
-    'User Behavior',
-    'Maintenance',
-    'Network Planning'
+    'Other'
   ]
 
-  useEffect(() => {
-    loadPricingTiers()
-  }, [])
-
-  const loadPricingTiers = async () => {
+  const handleDownloadTemplate = async () => {
     try {
-      const tiers = await pricingApi.getAll()
-      setPricingTiers(tiers.filter((t: any) => t.isActive))
-    } catch (error) {
-      console.error('Failed to load pricing tiers:', error)
+      setDownloadingTemplate(true)
+      const blob = await datasetsApi.downloadTemplate()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'dataset_template.csv'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error: any) {
+      alert('❌ Lỗi download template: ' + error.message)
+    } finally {
+      setDownloadingTemplate(false)
     }
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0])
+      const selectedFile = e.target.files[0]
+      if (!selectedFile.name.toLowerCase().endsWith('.csv')) {
+        alert('Vui lòng chọn file CSV!')
+        return
+      }
+      setFile(selectedFile)
     }
   }
 
@@ -56,6 +60,16 @@ export default function ProviderNew() {
       return
     }
 
+    if (!formData.name.trim()) {
+      alert('Vui lòng nhập tên dataset!')
+      return
+    }
+
+    if (!formData.category) {
+      alert('Vui lòng chọn danh mục!')
+      return
+    }
+
     setUploading(true)
     
     try {
@@ -63,41 +77,88 @@ export default function ProviderNew() {
       uploadData.append('Name', formData.name)
       uploadData.append('Description', formData.description)
       uploadData.append('Category', formData.category)
-      if (formData.tierId) uploadData.append('TierId', formData.tierId)
-      uploadData.append('DataFormat', formData.dataFormat)
-      uploadData.append('file', file)
+      uploadData.append('CsvFile', file)
 
-      await datasetsApi.create(uploadData)
+      const result = await datasetsApi.upload(uploadData)
       
-      alert('✅ Dataset đã được upload thành công! Đang chờ kiểm duyệt.')
-      navigate('/provider/dashboard')
+      alert(`✅ Dataset "${result.name}" đã được upload thành công!\n\n` +
+            `ID: ${result.datasetId}\n` +
+            `Records: ${result.rowCount}\n` +
+            `Status: Đang chờ kiểm duyệt\n\n` +
+            `Bạn sẽ được chuyển về dashboard sau 2 giây...`)
+      
+      setTimeout(() => {
+        navigate('/provider/dashboard')
+      }, 2000)
     } catch (error: any) {
-      alert('❌ Lỗi: ' + error.message)
+      const errorMsg = error.response?.data?.message || error.message
+      alert('❌ Lỗi upload: ' + errorMsg)
     } finally {
       setUploading(false)
     }
   }
 
-  const selectedTier = pricingTiers.find(t => t.tierId === parseInt(formData.tierId))
-
   return (
     <ProviderLayout>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">
-            B2: Upload Dataset
+            Upload Dataset
           </h1>
           <p className="text-gray-600">
-            Cung cấp dữ liệu lên nền tảng và nhận 70% doanh thu
+            Cung cấp dữ liệu lên nền tảng và nhận phần trăm doanh thu
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Template Download Card */}
+          <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-2xl shadow-lg p-6 border-2 border-purple-200">
+            <h2 className="text-xl font-bold mb-4 flex items-center">
+              <span className="w-8 h-8 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mr-3 text-sm font-bold">1</span>
+              Download CSV Template
+            </h2>
+            <div className="space-y-3">
+              <p className="text-sm text-gray-700">
+                📥 Download template, fill in your EV charging data, then upload the completed CSV file.
+              </p>
+              <button
+                type="button"
+                onClick={handleDownloadTemplate}
+                disabled={downloadingTemplate}
+                className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50 inline-flex items-center justify-center"
+              >
+                {downloadingTemplate ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Downloading...
+                  </span>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Download CSV Template
+                  </>
+                )}
+              </button>
+              <div className="bg-white/60 rounded-lg p-3 text-xs text-gray-600">
+                <p className="font-semibold mb-1">ℹ️ Template includes:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>All required fields: StationId, StationName, ProvinceId, DistrictId, etc.</li>
+                  <li>Sample data showing the correct format</li>
+                  <li>Data validation guidelines</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
           {/* Basic Info Card */}
           <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
             <h2 className="text-xl font-bold mb-4 flex items-center">
-              <span className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mr-3 text-sm font-bold">1</span>
+              <span className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mr-3 text-sm font-bold">2</span>
               Thông tin cơ bản
             </h2>
 
@@ -135,10 +196,9 @@ export default function ProviderNew() {
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Mô tả <span className="text-red-500">*</span>
+                  Mô tả
                 </label>
                 <textarea
-                  required
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -152,7 +212,7 @@ export default function ProviderNew() {
           {/* File Upload Card */}
           <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
             <h2 className="text-xl font-bold mb-4 flex items-center">
-              <span className="w-8 h-8 bg-green-100 text-green-600 rounded-full flex items-center justify-center mr-3 text-sm font-bold">2</span>
+              <span className="w-8 h-8 bg-green-100 text-green-600 rounded-full flex items-center justify-center mr-3 text-sm font-bold">3</span>
               Upload File CSV
             </h2>
 
@@ -164,7 +224,7 @@ export default function ProviderNew() {
                 <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 transition-colors">
                   <input
                     type="file"
-                    accept=".csv,.xlsx"
+                    accept=".csv"
                     onChange={handleFileChange}
                     className="hidden"
                     id="file-upload"
@@ -185,7 +245,7 @@ export default function ProviderNew() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                         </svg>
                         <p className="text-gray-600 font-medium mb-1">Kéo thả file hoặc nhấp để chọn</p>
-                        <p className="text-sm text-gray-500">CSV hoặc Excel, tối đa 100MB</p>
+                        <p className="text-sm text-gray-500">CSV file only, tối đa 100MB</p>
                       </div>
                     )}
                   </label>
@@ -193,86 +253,20 @@ export default function ProviderNew() {
               </div>
 
               <div className="bg-blue-50 rounded-lg p-4 text-sm text-blue-800">
-                <p className="font-semibold mb-2">ℹ️ Yêu cầu file:</p>
+                <p className="font-semibold mb-2">ℹ️ Yêu cầu file CSV:</p>
                 <ul className="list-disc list-inside space-y-1 text-xs">
-                  <li>File CSV hoặc Excel (.csv, .xlsx)</li>
-                  <li>Có header row (tên các cột)</li>
-                  <li>Dữ liệu clean, không có lỗi format</li>
-                  <li>Kích thước tối đa 100MB</li>
+                  <li>File must match the template structure</li>
+                  <li>All required fields must be present</li>
+                  <li>ProvinceId and DistrictId must exist in database</li>
+                  <li>Dates in format: yyyy-MM-dd HH:mm:ss</li>
+                  <li>Numeric fields must be valid numbers</li>
+                  <li>Maximum file size: 100MB</li>
                 </ul>
               </div>
             </div>
           </div>
 
-          {/* Pricing Tier Selection */}
-          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
-            <h2 className="text-xl font-bold mb-4 flex items-center">
-              <span className="w-8 h-8 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mr-3 text-sm font-bold">3</span>
-              Chọn Pricing Tier
-            </h2>
-
-            <div className="grid md:grid-cols-3 gap-4 mb-4">
-              {pricingTiers.map((tier) => (
-                <label
-                  key={tier.tierId}
-                  className={`cursor-pointer rounded-xl border-2 p-4 transition-all ${
-                    formData.tierId === tier.tierId.toString()
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-blue-300'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="tierId"
-                    value={tier.tierId}
-                    checked={formData.tierId === tier.tierId.toString()}
-                    onChange={(e) => setFormData({ ...formData, tierId: e.target.value })}
-                    className="sr-only"
-                  />
-                  <div className="text-center">
-                    <h3 className="font-bold text-lg mb-2">{tier.tierName}</h3>
-                    <p className="text-xs text-gray-600 mb-3 line-clamp-2">{tier.description}</p>
-                    
-                    <div className="space-y-2 text-sm">
-                      {tier.basePricePerMb && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">File:</span>
-                          <span className="font-semibold">{tier.basePricePerMb.toLocaleString('vi-VN')} đ/MB</span>
-                        </div>
-                      )}
-                      {tier.apiPricePerCall && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">API:</span>
-                          <span className="font-semibold">{tier.apiPricePerCall.toLocaleString('vi-VN')} đ/call</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="mt-3 pt-3 border-t border-gray-200 text-xs">
-                      <span className="text-green-600 font-bold">Bạn nhận: {tier.providerCommissionPercent}%</span>
-                    </div>
-                  </div>
-                </label>
-              ))}
-            </div>
-
-            {selectedTier && (
-              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
-                <div className="flex items-center gap-2 mb-2">
-                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span className="font-semibold text-green-800">Dự kiến doanh thu của bạn</span>
-                </div>
-                <p className="text-sm text-green-700">
-                  Với tier <strong>{selectedTier.tierName}</strong>, bạn sẽ nhận <strong>{selectedTier.providerCommissionPercent}%</strong> từ mỗi giao dịch. 
-                  Nền tảng giữ lại {selectedTier.adminCommissionPercent}% để duy trì hệ thống, marketing và support.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Terms & Submit */}
+          {/* Submit Card */}
           <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
             <h2 className="text-xl font-bold mb-4 flex items-center">
               <span className="w-8 h-8 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mr-3 text-sm font-bold">4</span>
@@ -285,7 +279,7 @@ export default function ProviderNew() {
                 <ul className="text-sm text-yellow-700 space-y-1 list-disc list-inside">
                   <li>Dataset sẽ được Moderator kiểm duyệt trong 24-48h</li>
                   <li>Dataset phải tuân thủ quy định pháp luật về dữ liệu</li>
-                  <li>Dữ liệu phải chính xác và được cập nhật định kỳ</li>
+                  <li>Dữ liệu phải chính xác và không chứa thông tin sai lệch</li>
                   <li>Bạn có trách nhiệm với chất lượng dữ liệu</li>
                 </ul>
               </div>
@@ -330,21 +324,11 @@ export default function ProviderNew() {
         {/* Revenue Info */}
         <div className="mt-6 bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-2xl p-6">
           <h3 className="text-xl font-bold mb-3">💰 Cơ chế chia sẻ doanh thu</h3>
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <div className="text-3xl font-bold mb-2">70%</div>
-              <p className="text-blue-100 text-sm">
-                Bạn nhận 70% doanh thu từ mỗi giao dịch bán dữ liệu
-              </p>
-            </div>
-            <div>
-              <div className="text-3xl font-bold mb-2">30%</div>
-              <p className="text-blue-100 text-sm">
-                Nền tảng giữ lại 30% cho hosting, marketing, payment gateway và support
-              </p>
-            </div>
-          </div>
-          <div className="mt-4 pt-4 border-t border-blue-400/30 text-sm text-blue-100">
+          <p className="text-blue-100 text-sm mb-4">
+            Doanh thu được chia tự động dựa trên SystemPricing configuration cho từng package type.
+            Bạn sẽ nhận phần trăm theo cấu hình của Admin.
+          </p>
+          <div className="text-sm text-blue-100">
             📅 Thanh toán hàng tháng vào ngày 1 qua chuyển khoản ngân hàng
           </div>
         </div>

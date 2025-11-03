@@ -1,19 +1,19 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import ProviderLayout from '../components/ProviderLayout'
-import { datasetsApi, payoutsApi } from '../api'
-import { useAuth } from '../contexts/AuthContext'
+import { datasetsApi } from '../api'
 import { Dataset } from '../types'
 
 export default function ProviderDashboard() {
-  const [datasets, setDatasets] = useState<any[]>([])
+  const [datasets, setDatasets] = useState<Dataset[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [stats, setStats] = useState({
     total: 0,
     approved: 0,
     pending: 0,
     rejected: 0,
-    totalSize: 0
+    totalRecords: 0
   })
 
   useEffect(() => {
@@ -23,19 +23,20 @@ export default function ProviderDashboard() {
   const loadData = async () => {
     try {
       setLoading(true)
+      setError(null)
       const data = await datasetsApi.getMy()
       setDatasets(data)
       
-      // Calculate stats
       setStats({
         total: data.length,
-        approved: data.filter((d: any) => d.moderationStatus === 'Approved').length,
-        pending: data.filter((d: any) => d.moderationStatus === 'Pending').length,
-        rejected: data.filter((d: any) => d.moderationStatus === 'Rejected').length,
-        totalSize: data.reduce((sum: number, d: any) => sum + (d.dataSizeMb || 0), 0)
+        approved: data.filter((d) => d.moderationStatus === 'Approved').length,
+        pending: data.filter((d) => d.moderationStatus === 'Pending').length,
+        rejected: data.filter((d) => d.moderationStatus === 'Rejected').length,
+        totalRecords: data.reduce((sum, d) => sum + (d.rowCount || 0), 0)
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load datasets:', error)
+      setError(error.response?.data?.message || error.message)
     } finally {
       setLoading(false)
     }
@@ -67,14 +68,17 @@ export default function ProviderDashboard() {
     }
   }
 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('vi-VN')
+  }
+
   return (
     <ProviderLayout>
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              B2: Provider Dashboard
+              Provider Dashboard
             </h1>
             <p className="text-gray-600 mt-1">Quản lý datasets và theo dõi thu nhập</p>
           </div>
@@ -96,8 +100,8 @@ export default function ProviderDashboard() {
               <span className="text-blue-100 text-sm font-medium">Tổng Datasets</span>
               <span className="text-3xl">📊</span>
             </div>
-            <div className="text-4xl font-bold mb-1">{stats.total}</div>
-            <div className="text-blue-100 text-sm">{stats.totalSize.toFixed(2)} MB tổng</div>
+            <div className="text-4xl font-bold mb-1">{stats.total || 0}</div>
+            <div className="text-blue-100 text-sm">{(stats.totalRecords || 0).toLocaleString()} records</div>
           </div>
 
           <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-lg p-6 text-white">
@@ -105,7 +109,7 @@ export default function ProviderDashboard() {
               <span className="text-green-100 text-sm font-medium">Đã duyệt</span>
               <span className="text-3xl">✅</span>
             </div>
-            <div className="text-4xl font-bold mb-1">{stats.approved}</div>
+            <div className="text-4xl font-bold mb-1">{stats.approved || 0}</div>
             <div className="text-green-100 text-sm">Đang bán trên nền tảng</div>
           </div>
 
@@ -114,7 +118,7 @@ export default function ProviderDashboard() {
               <span className="text-yellow-100 text-sm font-medium">Chờ duyệt</span>
               <span className="text-3xl">⏳</span>
             </div>
-            <div className="text-4xl font-bold mb-1">{stats.pending}</div>
+            <div className="text-4xl font-bold mb-1">{stats.pending || 0}</div>
             <div className="text-yellow-100 text-sm">Đang kiểm duyệt</div>
           </div>
 
@@ -123,7 +127,7 @@ export default function ProviderDashboard() {
               <span className="text-red-100 text-sm font-medium">Từ chối</span>
               <span className="text-3xl">❌</span>
             </div>
-            <div className="text-4xl font-bold mb-1">{stats.rejected}</div>
+            <div className="text-4xl font-bold mb-1">{stats.rejected || 0}</div>
             <div className="text-red-100 text-sm">Cần chỉnh sửa</div>
           </div>
         </div>
@@ -139,40 +143,58 @@ export default function ProviderDashboard() {
               <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
               <p className="text-gray-600 mt-4">Đang tải datasets...</p>
             </div>
+          ) : error ? (
+            <div className="p-12 text-center">
+              <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-12 h-12 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Lỗi tải dữ liệu</h3>
+              <p className="text-gray-600 mb-4">{error}</p>
+              <button
+                onClick={loadData}
+                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Thử lại
+              </button>
+            </div>
           ) : datasets.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="text-left py-4 px-6 font-semibold text-gray-700 text-sm">Dataset</th>
+                    <th className="text-left py-4 px-6 font-semibold text-gray-700 text-sm">ID</th>
+                    <th className="text-left py-4 px-6 font-semibold text-gray-700 text-sm">Name</th>
                     <th className="text-center py-4 px-6 font-semibold text-gray-700 text-sm">Category</th>
-                    <th className="text-center py-4 px-6 font-semibold text-gray-700 text-sm">Size</th>
-                    <th className="text-center py-4 px-6 font-semibold text-gray-700 text-sm">Tier</th>
-                    <th className="text-center py-4 px-6 font-semibold text-gray-700 text-sm">Trạng thái</th>
-                    <th className="text-center py-4 px-6 font-semibold text-gray-700 text-sm">Kiểm duyệt</th>
-                    <th className="text-center py-4 px-6 font-semibold text-gray-700 text-sm">Hành động</th>
+                    <th className="text-center py-4 px-6 font-semibold text-gray-700 text-sm">Records</th>
+                    <th className="text-center py-4 px-6 font-semibold text-gray-700 text-sm">Upload Date</th>
+                    <th className="text-center py-4 px-6 font-semibold text-gray-700 text-sm">Status</th>
+                    <th className="text-center py-4 px-6 font-semibold text-gray-700 text-sm">Moderation</th>
                   </tr>
                 </thead>
                 <tbody>
                   {datasets.map((dataset) => (
                     <tr key={dataset.datasetId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                      <td className="py-4 px-6 text-sm text-gray-600">
+                        #{dataset.datasetId}
+                      </td>
                       <td className="py-4 px-6">
                         <div className="font-semibold text-gray-900">{dataset.name}</div>
-                        <div className="text-sm text-gray-500 line-clamp-1">{dataset.description}</div>
+                        {dataset.description && (
+                          <div className="text-sm text-gray-500 line-clamp-1">{dataset.description}</div>
+                        )}
                       </td>
                       <td className="py-4 px-6 text-center">
                         <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
-                          {dataset.category}
+                          {dataset.category || 'N/A'}
                         </span>
                       </td>
-                      <td className="py-4 px-6 text-center text-sm text-gray-600">
-                        {dataset.dataSizeMb?.toFixed(2) || '0'} MB
+                      <td className="py-4 px-6 text-center text-sm text-gray-600 font-medium">
+                        {(dataset.rowCount || 0).toLocaleString()}
                       </td>
-                      <td className="py-4 px-6 text-center text-sm">
-                        <div className="font-medium text-gray-900">{dataset.tierName || 'N/A'}</div>
-                        {dataset.basePricePerMb && (
-                          <div className="text-xs text-gray-500">{dataset.basePricePerMb.toLocaleString('vi-VN')} đ/MB</div>
-                        )}
+                      <td className="py-4 px-6 text-center text-sm text-gray-600">
+                        {formatDate(dataset.uploadDate)}
                       </td>
                       <td className="py-4 px-6 text-center">
                         <span className={`inline-block px-3 py-1 text-xs font-semibold rounded-full ${
@@ -188,14 +210,6 @@ export default function ProviderDashboard() {
                           <span>{getStatusIcon(dataset.moderationStatus)}</span>
                           <span>{dataset.moderationStatus}</span>
                         </span>
-                      </td>
-                      <td className="py-4 px-6 text-center">
-                        <button
-                          className="text-blue-600 hover:text-blue-700 font-medium text-sm"
-                          title="Xem chi tiết"
-                        >
-                          Chi tiết
-                        </button>
                       </td>
                     </tr>
                   ))}
@@ -234,17 +248,28 @@ export default function ProviderDashboard() {
             </div>
             <div className="flex-1">
               <h3 className="font-bold text-lg text-gray-900 mb-2">Cơ chế chia sẻ doanh thu</h3>
-              <div className="grid md:grid-cols-2 gap-4 text-sm">
-                <div className="bg-white rounded-lg p-4">
-                  <div className="text-green-600 font-bold text-2xl mb-1">70%</div>
-                  <div className="text-gray-700">Bạn nhận từ mỗi giao dịch</div>
-                  <div className="text-xs text-gray-500 mt-2">Thanh toán hàng tháng vào ngày 1</div>
+              <p className="text-sm text-gray-700 mb-3">
+                Doanh thu được chia tự động theo SystemPricing configuration cho từng package type:
+              </p>
+              <div className="grid md:grid-cols-3 gap-3 text-sm">
+                <div className="bg-white rounded-lg p-3 border border-green-200">
+                  <div className="text-xs text-gray-500 mb-1">DataPackage</div>
+                  <div className="text-green-600 font-bold">70% provider</div>
+                  <div className="text-xs text-gray-500">Chia theo row count</div>
                 </div>
-                <div className="bg-white rounded-lg p-4">
-                  <div className="text-blue-600 font-bold text-2xl mb-1">30%</div>
-                  <div className="text-gray-700">Nền tảng giữ lại</div>
-                  <div className="text-xs text-gray-500 mt-2">Hosting, marketing, payment gateway</div>
+                <div className="bg-white rounded-lg p-3 border border-green-200">
+                  <div className="text-xs text-gray-500 mb-1">Subscription</div>
+                  <div className="text-green-600 font-bold">60% provider</div>
+                  <div className="text-xs text-gray-500">Chia đều providers</div>
                 </div>
+                <div className="bg-white rounded-lg p-3 border border-green-200">
+                  <div className="text-xs text-gray-500 mb-1">API Package</div>
+                  <div className="text-green-600 font-bold">65% provider</div>
+                  <div className="text-xs text-gray-500">Chia đều providers</div>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500 mt-3">
+                📅 Thanh toán hàng tháng vào ngày 1 qua chuyển khoản ngân hàng
               </div>
             </div>
           </div>

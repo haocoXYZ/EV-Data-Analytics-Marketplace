@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import ConsumerLayout from '../components/ConsumerLayout'
 import { datasetsApi } from '../api'
-import { Dataset } from '../types'
 
 export default function Catalog() {
   const [datasets, setDatasets] = useState<any[]>([])
@@ -10,7 +9,6 @@ export default function Catalog() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
-  const [sortBy, setSortBy] = useState('newest')
 
   const categories = [
     'All',
@@ -29,8 +27,8 @@ export default function Catalog() {
   }, [])
 
   useEffect(() => {
-    filterAndSort()
-  }, [datasets, searchTerm, selectedCategory, sortBy])
+    filterDatasets()
+  }, [datasets, searchTerm, selectedCategory])
 
   const loadDatasets = async () => {
     try {
@@ -44,7 +42,7 @@ export default function Catalog() {
     }
   }
 
-  const filterAndSort = () => {
+  const filterDatasets = () => {
     let filtered = [...datasets]
 
     // Filter by category
@@ -62,28 +60,10 @@ export default function Catalog() {
       )
     }
 
-    // Sort
-    switch (sortBy) {
-      case 'newest':
-        filtered.sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime())
-        break
-      case 'price-low':
-        filtered.sort((a, b) => (a.basePricePerMb || 0) - (b.basePricePerMb || 0))
-        break
-      case 'price-high':
-        filtered.sort((a, b) => (b.basePricePerMb || 0) - (a.basePricePerMb || 0))
-        break
-      case 'size':
-        filtered.sort((a, b) => (b.dataSizeMb || 0) - (a.dataSizeMb || 0))
-        break
-    }
+    // Sort by newest
+    filtered.sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime())
 
     setFilteredDatasets(filtered)
-  }
-
-  const formatPrice = (price: number | null | undefined) => {
-    if (!price) return 'Miễn phí'
-    return `${price.toLocaleString('vi-VN')} đ/MB`
   }
 
   return (
@@ -92,15 +72,36 @@ export default function Catalog() {
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-12">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h1 className="text-4xl font-bold mb-3">B4: Khám phá Datasets</h1>
-            <p className="text-blue-100 text-lg">Tìm kiếm và lựa chọn dữ liệu EV phù hợp với nhu cầu của bạn</p>
+            <h1 className="text-4xl font-bold mb-3">Danh sách Datasets</h1>
+            <p className="text-blue-100 text-lg">Khám phá dữ liệu có sẵn từ các nhà cung cấp</p>
           </div>
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Info Notice */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-8">
+            <div className="flex items-start gap-3">
+              <svg className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <h3 className="font-semibold text-blue-900 mb-1">Dữ liệu được mua theo địa điểm, không phải từng dataset riêng lẻ</h3>
+                <p className="text-sm text-blue-800">
+                  Xem danh sách để biết dữ liệu nào có sẵn. Để mua, chọn tỉnh thành và quận huyện cần thiết.
+                </p>
+                <Link 
+                  to="/buy-data" 
+                  className="inline-block mt-2 text-blue-700 font-semibold text-sm hover:underline"
+                >
+                  Mua dữ liệu theo địa điểm →
+                </Link>
+              </div>
+            </div>
+          </div>
+
           {/* Search & Filter Bar */}
           <div className="bg-white rounded-2xl shadow-lg p-6 mb-8 border border-gray-100">
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid md:grid-cols-2 gap-4">
               {/* Search */}
               <div className="md:col-span-2">
                 <div className="relative">
@@ -115,20 +116,6 @@ export default function Catalog() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </div>
-              </div>
-
-              {/* Sort */}
-              <div>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="newest">Mới nhất</option>
-                  <option value="price-low">Giá thấp → cao</option>
-                  <option value="price-high">Giá cao → thấp</option>
-                  <option value="size">Kích thước lớn nhất</option>
-                </select>
               </div>
             </div>
 
@@ -197,15 +184,12 @@ export default function Catalog() {
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-500 flex items-center gap-1">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                          </svg>
-                          {dataset.dataSizeMb?.toFixed(2)} MB
-                        </span>
-                        <span className="text-gray-500 flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                           </svg>
-                          {dataset.tierName}
+                          {dataset.rowCount?.toLocaleString() || 0} bản ghi
+                        </span>
+                        <span className="text-gray-500 text-xs">
+                          {new Date(dataset.uploadDate).toLocaleDateString('vi-VN')}
                         </span>
                       </div>
                     </div>
@@ -213,9 +197,6 @@ export default function Catalog() {
                     <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                       <div className="text-xs text-gray-500">
                         {dataset.providerName}
-                      </div>
-                      <div className="font-bold text-lg text-blue-600">
-                        {formatPrice(dataset.basePricePerMb)}
                       </div>
                     </div>
 

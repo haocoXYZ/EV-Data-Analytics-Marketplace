@@ -1,67 +1,40 @@
 import client from './client'
-import { PricingTier, PricingTierCreate } from '../types'
+import { SystemPricing, SystemPricingUpdate } from '../types'
 
 export const pricingApi = {
   /**
-   * GET /api/pricingtiers
-   * Get all active pricing tiers (public)
+   * GET /api/pricing
+   * Get all pricing configurations (3 package types)
    */
-  getAll: async (): Promise<PricingTier[]> => {
-    const response = await client.get<PricingTier[]>('/pricingtiers')
+  getAll: async (): Promise<SystemPricing[]> => {
+    const response = await client.get<SystemPricing[]>('/pricing')
     return response.data
   },
 
   /**
-   * GET /api/pricingtiers/{id}
-   * Get pricing tier by ID (public)
+   * GET /api/pricing/{id}
+   * Get pricing configuration by ID
    */
-  getById: async (id: number): Promise<PricingTier> => {
-    const response = await client.get<PricingTier>(`/pricingtiers/${id}`)
+  getById: async (id: number): Promise<SystemPricing> => {
+    const response = await client.get<SystemPricing>(`/pricing/${id}`)
     return response.data
   },
 
   /**
-   * POST /api/pricingtiers
-   * Create new pricing tier (Admin only)
+   * PUT /api/pricing/{id}
+   * Update pricing configuration (Admin only)
    */
-  create: async (data: PricingTierCreate): Promise<PricingTier> => {
-    const response = await client.post<PricingTier>('/pricingtiers', data)
+  update: async (id: number, data: SystemPricingUpdate): Promise<SystemPricing> => {
+    const response = await client.put<SystemPricing>(`/pricing/${id}`, data)
     return response.data
   },
 
   /**
-   * PUT /api/pricingtiers/{id}
-   * Update pricing tier (Admin only)
+   * PATCH /api/pricing/{id}/toggle-active
+   * Toggle active status (Admin only)
    */
-  update: async (id: number, data: Partial<PricingTierCreate>): Promise<PricingTier> => {
-    const response = await client.put<PricingTier>(`/pricingtiers/${id}`, data)
+  toggleActive: async (id: number): Promise<SystemPricing> => {
+    const response = await client.patch<SystemPricing>(`/pricing/${id}/toggle-active`)
     return response.data
-  },
-
-  /**
-   * DELETE /api/pricingtiers/{id}
-   * Delete pricing tier (Admin only)
-   */
-  delete: async (id: number): Promise<void> => {
-    await client.delete(`/pricingtiers/${id}`)
   },
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

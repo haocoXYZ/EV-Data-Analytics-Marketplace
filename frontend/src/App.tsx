@@ -3,8 +3,13 @@ import { Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
 import Catalog from './pages/Catalog'
 import DatasetDetail from './pages/DatasetDetail'
+import DataPackagePurchase from './pages/DataPackagePurchase'
+import SubscriptionDashboard from './pages/SubscriptionDashboard'
+import APIPackageKeys from './pages/APIPackageKeys'
 import Checkout from './pages/Checkout'
 import Success from './pages/Success'
+import PaymentSuccess from './pages/PaymentSuccess'
+import PaymentFailed from './pages/PaymentFailed'
 import MyPurchases from './pages/MyPurchases'
 import AdminPricing from './pages/AdminPricing'
 import ProviderNew from './pages/ProviderNew'
@@ -23,13 +28,18 @@ export default function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/catalog" element={<Catalog />} />
       <Route path="/dataset/:id" element={<DatasetDetail />} />
+      <Route path="/buy-data" element={<DataPackagePurchase />} />
       <Route path="/checkout" element={<Checkout />} />
       <Route path="/success" element={<Success />} />
+      <Route path="/payment-success" element={<PaymentSuccess />} />
+      <Route path="/payment-failed" element={<PaymentFailed />} />
       <Route path="/my-purchases" element={<MyPurchases />} />
+      <Route path="/subscriptions/:subscriptionId/dashboard" element={<SubscriptionDashboard />} />
+      <Route path="/api-packages/:purchaseId/keys" element={<APIPackageKeys />} />
       <Route path="/admin/dashboard" element={<AdminDashboard />} />
       <Route path="/admin/pricing" element={<AdminPricing />} />
       <Route path="/admin/payouts" element={<AdminPayouts />} />
-      <Route path="/moderation/review" element={<ModeratorReview />} />
+      <Route path="/moderator/review" element={<ModeratorReview />} />
       <Route path="/provider/dashboard" element={<ProviderDashboard />} />
       <Route path="/provider/new" element={<ProviderNew />} />
     </Routes>

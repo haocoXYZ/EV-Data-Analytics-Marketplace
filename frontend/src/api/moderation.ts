@@ -1,5 +1,5 @@
 import client from './client'
-import { Dataset, DatasetModeration } from '../types'
+import { Dataset, DatasetModerationDetail, DataPreviewResponse, ModerationActionDto } from '../types'
 
 export const moderationApi = {
   /**
@@ -12,45 +12,39 @@ export const moderationApi = {
   },
 
   /**
-   * POST /api/moderation/review
-   * Review dataset (approve or reject) - Admin/Moderator only
+   * GET /api/moderation/all
+   * Get all datasets with optional status filter (Admin/Moderator only)
    */
-  review: async (datasetId: number, moderationStatus: 'Approved' | 'Rejected', comments?: string): Promise<void> => {
-    await client.post('/moderation/review', {
-      datasetId,
-      moderationStatus,
-      comments
+  getAll: async (status?: string): Promise<Dataset[]> => {
+    const response = await client.get<Dataset[]>('/moderation/all', {
+      params: status ? { status } : undefined
     })
+    return response.data
   },
 
   /**
-   * Approve dataset (Admin/Moderator only)
+   * GET /api/moderation/{id}
+   * Get dataset details for moderation (Admin/Moderator only)
    */
-  approve: async (datasetId: number, comments?: string): Promise<void> => {
-    return moderationApi.review(datasetId, 'Approved', comments)
+  getById: async (datasetId: number): Promise<DatasetModerationDetail> => {
+    const response = await client.get<DatasetModerationDetail>(`/moderation/${datasetId}`)
+    return response.data
   },
 
   /**
-   * Reject dataset (Admin/Moderator only)
+   * GET /api/moderation/{id}/preview-data
+   * Preview dataset records with pagination (Moderator only)
    */
-  reject: async (datasetId: number, comments: string): Promise<void> => {
-    return moderationApi.review(datasetId, 'Rejected', comments)
-  },
-
-  /**
-   * GET /api/moderation/{id}/preview
-   * Preview dataset data for quality check (Moderator only)
-   */
-  preview: async (datasetId: number, sampleSize: number = 10): Promise<any> => {
-    const response = await client.get(`/moderation/${datasetId}/preview`, {
-      params: { sampleSize }
+  preview: async (datasetId: number, page: number = 1, pageSize: number = 50): Promise<DataPreviewResponse> => {
+    const response = await client.get<DataPreviewResponse>(`/moderation/${datasetId}/preview-data`, {
+      params: { page, pageSize }
     })
     return response.data
   },
 
   /**
    * GET /api/moderation/{id}/download
-   * Download dataset file for review (Moderator only)
+   * Download dataset CSV for review (Moderator only)
    */
   downloadForReview: async (datasetId: number): Promise<Blob> => {
     const response = await client.get(`/moderation/${datasetId}/download`, {
@@ -58,5 +52,26 @@ export const moderationApi = {
     })
     return response.data
   },
-}
 
+  /**
+   * PUT /api/moderation/{id}/approve
+   * Approve dataset (Admin/Moderator only)
+   */
+  approve: async (datasetId: number, comments?: string): Promise<{ message: string }> => {
+    const response = await client.put(`/moderation/${datasetId}/approve`, {
+      comments
+    } as ModerationActionDto)
+    return response.data
+  },
+
+  /**
+   * PUT /api/moderation/{id}/reject
+   * Reject dataset (Admin/Moderator only)
+   */
+  reject: async (datasetId: number, comments: string): Promise<{ message: string }> => {
+    const response = await client.put(`/moderation/${datasetId}/reject`, {
+      comments
+    } as ModerationActionDto)
+    return response.data
+  },
+}

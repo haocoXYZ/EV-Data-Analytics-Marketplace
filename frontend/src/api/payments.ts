@@ -12,39 +12,11 @@ export const paymentsApi = {
   },
 
   /**
-   * GET /api/payments/{id}/check-status
-   * Check payment status from PayOS (Consumer only)
+   * GET /api/payments/{id}/status
+   * Check payment status (Consumer only)
    */
-  checkStatus: async (id: number): Promise<Payment> => {
-    const response = await client.get<Payment>(`/payments/${id}/check-status`)
-    return response.data
-  },
-
-  /**
-   * GET /api/payments/my
-   * Get payments by current consumer (Consumer only)
-   */
-  getMy: async (): Promise<Payment[]> => {
-    const response = await client.get<Payment[]>('/payments/my')
+  getStatus: async (id: number): Promise<Payment> => {
+    const response = await client.get<Payment>(`/payments/${id}/status`)
     return response.data
   },
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
