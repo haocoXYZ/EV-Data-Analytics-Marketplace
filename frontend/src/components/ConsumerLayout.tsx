@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 interface ConsumerLayoutProps {
@@ -8,7 +8,13 @@ interface ConsumerLayoutProps {
 
 export default function ConsumerLayout({ children }: ConsumerLayoutProps) {
   const location = useLocation()
+  const navigate = useNavigate()
   const { user, logout } = useAuth()
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
   
   const navItems = [
     { path: '/', label: 'Trang chủ' },
@@ -58,12 +64,12 @@ export default function ConsumerLayout({ children }: ConsumerLayoutProps) {
                 <>
                   <div className="hidden md:flex items-center space-x-2 px-3 py-2 bg-gray-100 rounded-lg">
                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold">
-                      {user.name.charAt(0).toUpperCase()}
+                      {user.fullName?.charAt(0).toUpperCase() || 'C'}
                     </div>
-                    <span className="text-sm font-medium text-gray-700">{user.name}</span>
+                    <span className="text-sm font-medium text-gray-700">{user.fullName}</span>
                   </div>
                   <button
-                    onClick={logout}
+                    onClick={handleLogout}
                     className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                   >
                     Đăng xuất

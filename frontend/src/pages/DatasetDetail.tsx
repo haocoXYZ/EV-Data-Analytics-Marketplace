@@ -1,296 +1,219 @@
-import React, { useMemo, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import React, { useEffect, useState } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import ConsumerLayout from '../components/ConsumerLayout'
-import datasetsData from '../data/datasets.json'
-import { getPricing } from '../api/admin'
-
-type Dataset = {
-  id: string
-  name: string
-  provider: string
-  category: string
-  tags?: string[]
-  regions: string[]
-  description: string
-  status: 'approved' | 'pending' | 'kyc' | 'suspended'
-  rating?: number
-  totalDownloads?: number
-  lastUpdated?: string
-  packages?: { file?: boolean; api?: boolean; subscription?: boolean }
-  sampleData?: { totalRecords?: number; dateRange?: string; updateFrequency?: string }
-}
+import { datasetsApi } from '../api'
 
 export default function DatasetDetail() {
-  const { id } = useParams<{ id: string }>()
+  const { id } = useParams()
   const navigate = useNavigate()
-  const dataset = (datasetsData as { datasets: Dataset[] }).datasets.find(d => d.id === id)
+  
+  const [dataset, setDataset] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
 
-  // ---- Lấy cấu hình giá từ Admin (localStorage) ----
-  const pricing = getPricing()
-  const fmt = useMemo(() => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }), [])
-  // Cho gói File: nếu Admin chưa cấu hình per-day, fallback 2 USD/ngày (giữ trải nghiệm cũ)
-  const filePerDayUSD = (pricing as any)?.oneTime?.perDayUSD ?? 2
+  useEffect(() => {
+    if (id) {
+      loadDataset(parseInt(id))
+    }
+  }, [id])
 
-  // ---- Trạng thái gói & tham số ----
-  const [selectedPackage, setSelectedPackage] = useState<'file' | 'api' | 'subscription'>('file')
-  const [days, setDays] = useState<number>(pricing.oneTime?.lookbackDays ?? 30)
-  const [requests, setRequests] = useState<number>(1000)
-  const [selectedRegions, setSelectedRegions] = useState<string[]>([])
-  const [months, setMonths] = useState<number>(pricing.monthly?.options?.[0]?.months ?? 1)
+  const loadDataset = async (datasetId: number) => {
+    try {
+      setLoading(true)
+      const data = await datasetsApi.getById(Number(datasetId))
+      setDataset(data)
+    } catch (error) {
+      console.error('Failed to load dataset:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  if (!dataset) {
+  const getProvinceName = (provinceId: number) => {
+    const provinces: any = { 1: 'Hà Nội', 2: 'Hồ Chí Minh', 3: 'Đà Nẵng' }
+    return provinces[provinceId] || 'Unknown'
+  }
+
+  if (loading) {
     return (
       <ConsumerLayout>
         <div className="max-w-7xl mx-auto px-4 py-12 text-center">
-          <h1 className="text-2xl font-bold text-gray-900">Không tìm thấy dữ liệu trạm sạc</h1>
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p className="text-gray-600 mt-4">Đang tải dataset...</p>
         </div>
       </ConsumerLayout>
     )
   }
 
-  // Danh sách gói hiển thị (theo dataset.packages)
-  const availablePackages = useMemo(() => {
-    const flags = dataset.packages || {}
-    return [
-      {
-        id: 'file' as const,
-        name: pricing.oneTime?.meta?.title || 'Data File Package',
-        description: pricing.oneTime?.meta?.description || 'One-time purchase for historical data in CSV format',
-        enabled: !!flags.file,
-      },
-      {
-        id: 'api' as const,
-        name: pricing.api?.meta?.title || 'API Access Package',
-        description: pricing.api?.meta?.description || 'Pay-per-request API access for real-time data',
-        enabled: !!flags.api,
-      },
-      {
-        id: 'subscription' as const,
-        name: pricing.monthly?.meta?.title || 'Regional Subscription',
-        description: pricing.monthly?.meta?.description || 'Unlimited access for specific regions',
-        enabled: !!flags.subscription,
-      },
-    ].filter(x => x.enabled)
-  }, [dataset.packages, pricing])
-
-  // Giá theo lựa chọn
-  const totalUSD = useMemo(() => {
-    if (selectedPackage === 'file') {
-      return Number(pricing.oneTime.priceUSD) + Number(days || 0) * Number(filePerDayUSD)
-    }
-    if (selectedPackage === 'api') {
-      return Number(requests || 0) * Number(pricing.api.pricePerRequest)
-    }
-    // subscription
-    const opt = pricing.monthly.options.find(o => o.months === Number(months))
-      || pricing.monthly.options[0]
-    const regionsCount = selectedRegions.length || 0
-    return regionsCount * Number(opt.pricePerRegionPerMonthUSD) * Number(months || opt.months)
-  }, [selectedPackage, days, requests, months, selectedRegions, pricing, filePerDayUSD])
-
-  const toggleRegion = (region: string) => {
-    setSelectedRegions(prev => (prev.includes(region) ? prev.filter(r => r !== region) : [...prev, region]))
+  if (!dataset) {
+    return (
+      <ConsumerLayout>
+        <div className="max-w-7xl mx-auto px-4 py-12 text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Dataset không tìm thấy</h2>
+          <button onClick={() => navigate('/catalog')} className="text-blue-600 hover:text-blue-700">
+            ← Quay lại Catalog
+          </button>
+        </div>
+      </ConsumerLayout>
+    )
   }
-
-  const handlePurchase = () => {
-    const orderData = {
-      datasetId: dataset.id,
-      datasetName: dataset.name,
-      pkg: selectedPackage,
-      params: { days, requests, months, regions: selectedRegions },
-      pricingSnapshot: pricing,                // lưu lại bản giá lúc tạo order
-      totalUSD: Number(totalUSD.toFixed(2)),
-    }
-    localStorage.setItem('pendingOrder', JSON.stringify(orderData))
-    navigate('/checkout')
-  }
-
-  // Chuẩn bị helpers hiển thị
-  const minMonthly = Math.min(...pricing.monthly.options.map(o => o.pricePerRegionPerMonthUSD))
-  const currentMonthly = pricing.monthly.options.find(o => o.months === months) || pricing.monthly.options[0]
 
   return (
     <ConsumerLayout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <button
-          onClick={() => navigate('/catalog')}
-          className="text-blue-600 hover:text-blue-700 mb-6 font-medium text-sm"
-        >
-          &lt; Quay lại danh sách
-        </button>
-
-        <div className="grid md:grid-cols-3 gap-8">
-          {/* Left: Dataset Info */}
-          <div className="md:col-span-2 space-y-6">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="mb-4">
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">{dataset.name}</h1>
-                <p className="text-gray-600">
-                  Nhà cung cấp: <span className="font-medium">{dataset.provider}</span>
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2 mb-4">
-                {(dataset.tags || []).map(tag => (
-                  <span key={tag} className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded-md font-medium">
-                    {tag}
-                  </span>
-                ))}
-              </div>
-
-              <p className="text-gray-700 leading-relaxed mb-6">{dataset.description}</p>
-
-              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <div>
-                  <div className="text-sm text-gray-600 mb-1">Tổng records</div>
-                  <div className="text-lg font-semibold">
-                    {dataset.sampleData?.totalRecords?.toLocaleString() ?? '—'}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600 mb-1">Khoảng thời gian</div>
-                  <div className="text-lg font-semibold">{dataset.sampleData?.dateRange ?? '—'}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600 mb-1">Tần suất cập nhật</div>
-                  <div className="text-lg font-semibold">{dataset.sampleData?.updateFrequency ?? '—'}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600 mb-1">Lượt tải</div>
-                  <div className="text-lg font-semibold">{dataset.totalDownloads?.toLocaleString() ?? '—'}</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold mb-3">Khu vực hỗ trợ</h2>
-              <div className="flex flex-wrap gap-2">
-                {dataset.regions.map(region => (
-                  <span key={region} className="px-3 py-1 bg-blue-50 text-blue-700 rounded-md text-sm font-medium">
-                    {region}
-                  </span>
-                ))}
-              </div>
+      <div className="bg-gray-50 min-h-screen">
+        {/* Breadcrumb */}
+        <div className="bg-white border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <Link to="/" className="hover:text-blue-600">Trang chủ</Link>
+              <span>/</span>
+              <Link to="/catalog" className="hover:text-blue-600">Catalog</Link>
+              <span>/</span>
+              <span className="text-gray-900 font-medium">{dataset.name}</span>
             </div>
           </div>
+        </div>
 
-          {/* Right: Package Selection */}
-          <div>
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sticky top-4">
-              <h2 className="text-lg font-semibold mb-4">Chọn gói dữ liệu</h2>
-
-              {/* Package Tabs */}
-              <div className="space-y-2 mb-6">
-                {availablePackages.map(pkg => (
-                  <button
-                    key={pkg.id}
-                    onClick={() => setSelectedPackage(pkg.id)}
-                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                      selectedPackage === pkg.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="font-semibold text-gray-900 mb-1">{pkg.name}</div>
-                    <div className="text-sm text-gray-600">{pkg.description}</div>
-                  </button>
-                ))}
-              </div>
-
-              {/* Package Config */}
-              <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                {selectedPackage === 'file' && (
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Số ngày dữ liệu</label>
-                    <input
-                      type="number"
-                      value={days}
-                      onChange={(e) => setDays(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                      min="1"
-                    />
-                    <div className="text-xs text-gray-500 mt-2">
-                      {fmt.format(pricing.oneTime.priceUSD)} cơ bản + {fmt.format(filePerDayUSD)}/ngày
-                    </div>
-                  </div>
-                )}
-
-                {selectedPackage === 'api' && (
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Số lượt request</label>
-                    <input
-                      type="number"
-                      value={requests}
-                      onChange={(e) => setRequests(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                      min="1"
-                      step="100"
-                    />
-                    <div className="text-xs text-gray-500 mt-2">
-                      {fmt.format(pricing.api.pricePerRequest)}/request
-                    </div>
-                  </div>
-                )}
-
-                {selectedPackage === 'subscription' && (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Chọn khu vực</label>
-                      <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {dataset.regions.map(region => (
-                          <label key={region} className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={selectedRegions.includes(region)}
-                              onChange={() => toggleRegion(region)}
-                              className="rounded text-blue-600"
-                            />
-                            <span className="text-sm">{region}</span>
-                          </label>
-                        ))}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="grid lg:grid-cols-3 gap-8">
+            {/* Main Content */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Dataset Info */}
+              <div className="bg-white rounded-2xl shadow-lg p-8 border border-gray-100">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 text-sm font-semibold rounded-full mb-3">
+                      {dataset.category}
+                    </span>
+                    <h1 className="text-3xl font-bold text-gray-900 mb-2">{dataset.name}</h1>
+                    <div className="flex items-center gap-4 text-sm text-gray-500">
+                      <div className="flex items-center gap-1">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                        {dataset.providerName}
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Thời hạn (tháng)</label>
-                      <select
-                        value={months}
-                        onChange={(e) => setMonths(parseInt(e.target.value) || pricing.monthly.options[0].months)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                      >
-                        {pricing.monthly.options.map(o => (
-                          <option key={o.months} value={o.months}>
-                            {o.months} tháng — {fmt.format(o.pricePerRegionPerMonthUSD)}/khu vực/tháng
-                          </option>
-                        ))}
-                      </select>
-                      <div className="text-xs text-gray-500 mt-2">
-                        Giá thấp nhất: {fmt.format(minMonthly)}/khu vực/tháng
+                      <div className="flex items-center gap-1">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {new Date(dataset.uploadDate).toLocaleDateString('vi-VN')}
                       </div>
+                      {dataset.lastUpdated && (
+                        <div className="flex items-center gap-1">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          Cập nhật {new Date(dataset.lastUpdated).toLocaleDateString('vi-VN')}
+                        </div>
+                      )}
                     </div>
                   </div>
-                )}
-              </div>
-
-              {/* Price & CTA */}
-              <div className="border-t border-gray-200 pt-4">
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-gray-600">Tổng cộng</span>
-                  <span className="text-3xl font-bold text-blue-600">
-                    {fmt.format(totalUSD)}
-                  </span>
                 </div>
-                <button
-                  onClick={handlePurchase}
-                  disabled={selectedPackage === 'subscription' && selectedRegions.length === 0}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors"
-                >
-                  Tiếp tục thanh toán
-                </button>
 
-                {selectedPackage === 'subscription' && selectedRegions.length === 0 && (
-                  <p className="text-xs text-gray-500 mt-2">Chọn ít nhất 1 khu vực.</p>
+                <div className="prose max-w-none">
+                  <h2 className="text-lg font-bold text-gray-900 mb-3">Mô tả</h2>
+                  <p className="text-gray-700 leading-relaxed">{dataset.description || 'Không có mô tả chi tiết'}</p>
+                </div>
+
+                {/* Metadata */}
+                <div className="mt-6 grid md:grid-cols-2 gap-4">
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <div className="text-sm text-gray-600 mb-1">Số bản ghi</div>
+                    <div className="text-2xl font-bold text-gray-900">{dataset.rowCount?.toLocaleString() || 0}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <div className="text-sm text-gray-600 mb-1">Định dạng</div>
+                    <div className="text-2xl font-bold text-gray-900">CSV</div>
+                  </div>
+                  {dataset.provinceId && (
+                    <div className="bg-gray-50 rounded-xl p-4">
+                      <div className="text-sm text-gray-600 mb-1">Khu vực</div>
+                      <div className="text-lg font-bold text-gray-900">{getProvinceName(dataset.provinceId)}</div>
+                    </div>
+                  )}
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <div className="text-sm text-gray-600 mb-1">Trạng thái</div>
+                    <div className="text-lg font-bold text-green-600">Đã duyệt</div>
+                  </div>
+                </div>
+
+                {/* Provider Info */}
+                {dataset.providerContactEmail && (
+                  <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                    <h3 className="text-sm font-semibold text-blue-900 mb-2">Thông tin nhà cung cấp</h3>
+                    <div className="text-sm text-blue-800">
+                      <div className="font-medium">{dataset.providerName}</div>
+                      <div className="text-blue-600">{dataset.providerContactEmail}</div>
+                    </div>
+                  </div>
                 )}
+              </div>
+            </div>
+
+            {/* Sidebar - Purchase Info */}
+            <div className="lg:col-span-1">
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 sticky top-4">
+                <div className="p-6 border-b border-gray-100">
+                  <h2 className="text-xl font-bold mb-1">Mua dữ liệu này</h2>
+                  <p className="text-sm text-gray-600">Theo địa điểm</p>
+                </div>
+
+                <div className="p-6">
+                  <div className="bg-blue-50 rounded-xl p-4 mb-6 border border-blue-100">
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="text-sm text-blue-900">
+                        Dataset này là một phần của bộ sưu tập dữ liệu {dataset.provinceId ? getProvinceName(dataset.provinceId) : 'EV'} của chúng tôi. 
+                        Mua dữ liệu theo địa điểm để truy cập.
+                      </div>
+                    </div>
+                  </div>
+
+                  <Link
+                    to="/buy-data"
+                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 rounded-xl font-bold text-lg hover:shadow-xl transition-all inline-block text-center"
+                  >
+                    Mua dữ liệu theo địa điểm →
+                  </Link>
+
+                  <div className="mt-6 space-y-3">
+                    <h3 className="font-semibold text-gray-900">Ba cách mua:</h3>
+                    <div className="space-y-2 text-sm text-gray-600">
+                      <div className="flex items-start gap-2">
+                        <span className="text-blue-600">📁</span>
+                        <div>
+                          <span className="font-medium text-gray-900">Data Package:</span> Tải CSV một lần theo tỉnh/quận
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-blue-600">📊</span>
+                        <div>
+                          <span className="font-medium text-gray-900">Subscription:</span> Dashboard theo dõi theo tháng
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-blue-600">⚡</span>
+                        <div>
+                          <span className="font-medium text-gray-900">API Package:</span> Truy cập lập trình qua API
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 pt-6 border-t border-gray-200">
+                    <Link 
+                      to="/catalog" 
+                      className="text-gray-600 hover:text-gray-900 text-sm inline-flex items-center"
+                    >
+                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                      Quay lại Catalog
+                    </Link>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -299,4 +222,3 @@ export default function DatasetDetail() {
     </ConsumerLayout>
   )
 }
-  

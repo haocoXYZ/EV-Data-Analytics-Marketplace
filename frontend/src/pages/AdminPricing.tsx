@@ -1,488 +1,398 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import DashboardLayout from '../components/DashboardLayout'
-import { getPricing, savePricing } from '../api/admin'
-import type { PricingConfig, PricingMonthlyOption, MonthlyTerm, PlanMeta } from '../types/admin'
-
-type EditTarget = 'api' | 'oneTime' | 'monthly' | 'commission' | null
-
-const TERM_LABEL: Record<MonthlyTerm, string> = {
-  1: '1 tháng',
-  3: '3 tháng',
-  6: '6 tháng',
-  9: '9 tháng',
-  12: '12 tháng',
-}
+import React, { useEffect, useState } from 'react'
+import toast from 'react-hot-toast'
+import AdminLayout from '../components/AdminLayout'
+import { pricingApi } from '../api'
+import { SystemPricing } from '../types'
 
 export default function AdminPricing() {
-  const [cfg, setCfg] = useState<PricingConfig | null>(null)
-  const [editTarget, setEditTarget] = useState<EditTarget>(null)
-  const [draft, setDraft] = useState<PricingConfig | null>(null)
-  const [copied, setCopied] = useState(false)
+  const [pricingConfigs, setPricingConfigs] = useState<SystemPricing[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [saving, setSaving] = useState<number | null>(null)
 
-  useEffect(() => setCfg(getPricing()), [])
+  const [formData, setFormData] = useState<Record<number, {
+    pricePerRow?: number
+    subscriptionMonthlyBase?: number
+    apiPricePerCall?: number
+    providerCommissionPercent: number
+    adminCommissionPercent: number
+  }>>({})
 
-  const providerPercent = useMemo(() => {
-    const p = cfg?.commission.platformPercent ?? 0
-    return Math.max(0, 100 - p)
-  }, [cfg])
+  useEffect(() => {
+    loadPricing()
+  }, [])
 
-  const minMonthly = useMemo(() => {
-    if (!cfg?.monthly?.options?.length) return null
-    return cfg.monthly.options.reduce(
-      (min, o) =>
-        o.pricePerRegionPerMonthUSD < min.pricePerRegionPerMonthUSD ? o : min,
-      cfg.monthly.options[0]
-    )
-  }, [cfg])
-
-  function openEditor(target: EditTarget) {
-    if (!cfg) return
-    setEditTarget(target)
-    setDraft(JSON.parse(JSON.stringify(cfg)))
-  }
-  function closeEditor() { setEditTarget(null); setDraft(null) }
-
-  function setMonthlyPrice(months: MonthlyTerm, price: number) {
-    if (!draft) return
-    const opts = [...(draft.monthly?.options || [])]
-    const i = opts.findIndex(o => o.months === months)
-    if (i >= 0) opts[i] = { ...opts[i], pricePerRegionPerMonthUSD: price }
-    else opts.push({ months, pricePerRegionPerMonthUSD: price })
-    opts.sort((a, b) => a.months - b.months)
-    setDraft({ ...draft, monthly: { ...draft.monthly, options: opts as PricingMonthlyOption[] } })
-  }
-
-  // ==== helpers cho meta (title/description/features) ====
-  function getMeta(target: Exclude<EditTarget, 'commission'>): PlanMeta {
-    const d = draft!
-    return target === 'api' ? d.api.meta : target === 'oneTime' ? d.oneTime.meta : d.monthly.meta
-  }
-  function setMeta(target: Exclude<EditTarget, 'commission'>, patch: Partial<PlanMeta>) {
-    if (!draft) return
-    if (target === 'api') setDraft({ ...draft, api: { ...draft.api, meta: { ...draft.api.meta, ...patch } } })
-    if (target === 'oneTime') setDraft({ ...draft, oneTime: { ...draft.oneTime, meta: { ...draft.oneTime.meta, ...patch } } })
-    if (target === 'monthly') setDraft({ ...draft, monthly: { ...draft.monthly, meta: { ...draft.monthly.meta, ...patch } } })
-  }
-  function setFeature(target: Exclude<EditTarget, 'commission'>, idx: number, value: string) {
-    const meta = getMeta(target)
-    const next = [...meta.features]
-    next[idx] = value
-    setMeta(target, { features: next })
-  }
-  function addFeature(target: Exclude<EditTarget, 'commission'>) {
-    const meta = getMeta(target)
-    setMeta(target, { features: [...meta.features, ''] })
-  }
-  function removeFeature(target: Exclude<EditTarget, 'commission'>, idx: number) {
-    const meta = getMeta(target)
-    const next = meta.features.filter((_, i) => i !== idx)
-    setMeta(target, { features: next })
+  const loadPricing = async () => {
+    try {
+      setLoading(true)
+      const data = await pricingApi.getAll()
+      setPricingConfigs(data)
+      
+      const initialFormData: typeof formData = {}
+      data.forEach(config => {
+        initialFormData[config.pricingId] = {
+          pricePerRow: config.pricePerRow,
+          subscriptionMonthlyBase: config.subscriptionMonthlyBase,
+          apiPricePerCall: config.apiPricePerCall,
+          providerCommissionPercent: config.providerCommissionPercent,
+          adminCommissionPercent: config.adminCommissionPercent
+        }
+      })
+      setFormData(initialFormData)
+    } catch (error) {
+      console.error('Failed to load pricing:', error)
+      toast.error('Lỗi tải pricing configurations')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  function saveCurrent() {
-    if (!cfg || !draft || !editTarget) return
-    const next: PricingConfig = { ...cfg }
+  const handleEdit = (id: number) => {
+    setEditingId(id)
+  }
 
-    if (editTarget === 'api') {
-      next.api = {
-        pricePerRequest: Math.max(0, Number(draft.api.pricePerRequest) || 0),
-        note: draft.api.note || undefined,
-        meta: {
-          title: draft.api.meta.title?.trim() || 'API',
-          description: draft.api.meta.description?.trim(),
-          features: (draft.api.meta.features || []).filter(s => s.trim().length > 0),
-        },
+  const handleCancel = (id: number) => {
+    const config = pricingConfigs.find(p => p.pricingId === id)
+    if (config) {
+      setFormData({
+        ...formData,
+        [id]: {
+          pricePerRow: config.pricePerRow,
+          subscriptionMonthlyBase: config.subscriptionMonthlyBase,
+          apiPricePerCall: config.apiPricePerCall,
+          providerCommissionPercent: config.providerCommissionPercent,
+          adminCommissionPercent: config.adminCommissionPercent
+        }
+      })
+    }
+    setEditingId(null)
+  }
+
+  const handleSave = async (id: number) => {
+    const data = formData[id]
+    if (!data) return
+
+    const total = data.providerCommissionPercent + data.adminCommissionPercent
+    if (Math.abs(total - 100) > 0.01) {
+      toast.error(`Tổng commission phải bằng 100%! Hiện tại: Provider ${data.providerCommissionPercent}% + Admin ${data.adminCommissionPercent}% = ${total}%`)
+      return
+    }
+
+    try {
+      setSaving(id)
+      await pricingApi.update(id, data)
+      toast.success('Cập nhật pricing thành công!')
+      await loadPricing()
+      setEditingId(null)
+    } catch (error: any) {
+      toast.error('Lỗi: ' + (error.response?.data?.message || error.message))
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  const handleToggleActive = async (id: number) => {
+    try {
+      await pricingApi.toggleActive(id)
+      await loadPricing()
+      toast.success('Cập nhật trạng thái thành công!')
+    } catch (error: any) {
+      toast.error('Lỗi toggle active: ' + (error.response?.data?.message || error.message))
+    }
+  }
+
+  const updateFormField = (id: number, field: string, value: number) => {
+    setFormData({
+      ...formData,
+      [id]: {
+        ...formData[id],
+        [field]: value
       }
-    }
-
-    if (editTarget === 'oneTime') {
-      next.oneTime = {
-        priceUSD: Math.max(0, Number(draft.oneTime.priceUSD) || 0),
-        lookbackDays: Math.max(1, Math.floor(Number(draft.oneTime.lookbackDays) || 30)),
-        meta: {
-          title: draft.oneTime.meta.title?.trim() || 'Gói mua 1 lần',
-          description: draft.oneTime.meta.description?.trim(),
-          features: (draft.oneTime.meta.features || []).filter(s => s.trim().length > 0),
-        },
-      }
-    }
-
-    if (editTarget === 'monthly') {
-      next.monthly = {
-        options: (draft.monthly.options || [])
-          .filter(o => o && o.months && o.pricePerRegionPerMonthUSD >= 0)
-          .sort((a, b) => a.months - b.months) as PricingMonthlyOption[],
-        meta: {
-          title: draft.monthly.meta.title?.trim() || 'Gói tháng (3/6/9/12 tháng)',
-          description: draft.monthly.meta.description?.trim(),
-          features: (draft.monthly.meta.features || []).filter(s => s.trim().length > 0),
-        },
-      }
-    }
-
-    if (editTarget === 'commission') {
-      next.commission = {
-        platformPercent: Math.min(100, Math.max(0, Number(draft.commission.platformPercent) || 0)),
-      }
-    }
-
-    next.updatedAt = new Date().toISOString()
-    savePricing(next)
-    setCfg(next)
-    closeEditor()
+    })
   }
 
-  async function copyForProvider() {
-    if (!cfg) return
-    const lines: string[] = []
-    lines.push('BẢNG GIÁ DATA PROVIDERS')
-    lines.push('')
-    lines.push(`${cfg.api.meta.title}: $${cfg.api.pricePerRequest.toFixed(3)}/request`)
-    lines.push(
-      `${cfg.oneTime.meta.title}: $${cfg.oneTime.priceUSD.toFixed(0)} (dữ liệu từ ${cfg.oneTime.lookbackDays} ngày trước đến hôm nay)`
-    )
-    if (cfg.monthly.options?.length) {
-      lines.push(`${cfg.monthly.meta.title}:`)
-      cfg.monthly.options.forEach(o =>
-        lines.push(` - ${o.months} tháng: $${o.pricePerRegionPerMonthUSD}/khu vực/tháng`)
-      )
+  const getPackageIcon = (packageType: string) => {
+    switch (packageType) {
+      case 'DataPackage':
+        return '📦'
+      case 'SubscriptionPackage':
+        return '📅'
+      case 'APIPackage':
+        return '🔌'
+      default:
+        return '📊'
     }
-    lines.push('')
-    lines.push(
-      `Chia sẻ doanh thu: Nền tảng giữ ${cfg.commission.platformPercent}% — Provider nhận ${100 - cfg.commission.platformPercent}%`
-    )
-    await navigator.clipboard.writeText(lines.join('\n'))
-    setCopied(true); setTimeout(() => setCopied(false), 2000)
   }
 
-  // Mô tả gói one-time hỗ trợ {lookbackDays}
-  function renderOneTimeDesc() {
-    const d = cfg?.oneTime.meta.description
-    if (!cfg) return ''
-    return (d || `Dữ liệu được cập nhật từ ${cfg.oneTime.lookbackDays} ngày trước đến hôm nay`)
-      .replace('{lookbackDays}', String(cfg.oneTime.lookbackDays))
+  const getPackageTitle = (packageType: string) => {
+    switch (packageType) {
+      case 'DataPackage':
+        return 'Data Package'
+      case 'SubscriptionPackage':
+        return 'Subscription Package'
+      case 'APIPackage':
+        return 'API Package'
+      default:
+        return packageType
+    }
+  }
+
+  const formatCurrency = (amount: number | null | undefined) => {
+    if (!amount) return '-'
+    return `${amount.toLocaleString('vi-VN')} đ`
   }
 
   return (
-    <DashboardLayout>
+    <AdminLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Bảng giá cho Data Providers</h1>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">
+            Quản lý SystemPricing
+          </h1>
           <p className="text-gray-600">
-            Các nhà cung cấp dữ liệu sẽ dựa vào bảng giá này để quyết định tham gia nền tảng
+            Cấu hình giá và revenue split cho 3 package types
           </p>
         </div>
 
-        {!cfg ? (
-          <div className="text-gray-500">Đang tải cấu hình…</div>
+        {loading ? (
+          <div className="grid md:grid-cols-3 gap-6">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="bg-white rounded-2xl shadow-lg p-6 animate-pulse">
+                <div className="h-6 bg-gray-200 rounded w-3/4 mb-4"></div>
+                <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
+                <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+              </div>
+            ))}
+          </div>
         ) : (
-          <>
-            {/* Cards */}
-            <div className="grid md:grid-cols-3 gap-6 mb-8">
-              {/* API */}
-              <div className="card hover:shadow-xl transition-shadow relative">
-                <button
-                  onClick={() => openEditor('api')}
-                  className="absolute right-3 top-3 text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
+            {pricingConfigs.map((config) => {
+              const data = formData[config.pricingId]
+              const isEditing = editingId === config.pricingId
+              const isSaving = saving === config.pricingId
+
+              return (
+                <div
+                  key={config.pricingId}
+                  className={`bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden border-2 ${
+                    config.isActive ? 'border-blue-200' : 'border-gray-200 opacity-60'
+                  }`}
                 >
-                  ✏️ Sửa
-                </button>
-                <div className="text-center mb-4">
-                  <div className="text-5xl mb-3">🔌</div>
-                  <h2 className="text-2xl font-bold mb-2">{cfg.api.meta.title}</h2>
-                  <p className="text-gray-600 text-sm">{cfg.api.meta.description}</p>
-                </div>
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg mb-4 text-center">
-                  <div>
-                    <div className="text-3xl font-bold text-blue-700">
-                      ${cfg.api.pricePerRequest.toFixed(3)}
+                  <div className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white p-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-3xl">{getPackageIcon(config.packageType)}</span>
+                        <h3 className="text-xl font-bold">{getPackageTitle(config.packageType)}</h3>
+                      </div>
+                      <button
+                        onClick={() => handleToggleActive(config.pricingId)}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                          config.isActive 
+                            ? 'bg-green-500 hover:bg-green-600' 
+                            : 'bg-gray-500 hover:bg-gray-600'
+                        }`}
+                      >
+                        {config.isActive ? 'Active' : 'Inactive'}
+                      </button>
                     </div>
-                    <div className="text-sm text-gray-600 mt-1">mỗi request</div>
+                  </div>
+
+                  <div className="p-6">
+                    <div className="space-y-4 mb-6">
+                      {/* Price Fields */}
+                      {config.packageType === 'DataPackage' && (
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Price per Row (đ)
+                          </label>
+                          {isEditing ? (
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={data?.pricePerRow || ''}
+                              onChange={(e) => updateFormField(config.pricingId, 'pricePerRow', parseFloat(e.target.value))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            />
+                          ) : (
+                            <div className="font-semibold text-gray-900">{formatCurrency(config.pricePerRow)}</div>
+                          )}
+                        </div>
+                      )}
+
+                      {config.packageType === 'SubscriptionPackage' && (
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Monthly Base Price (đ)
+                          </label>
+                          {isEditing ? (
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={data?.subscriptionMonthlyBase || ''}
+                              onChange={(e) => updateFormField(config.pricingId, 'subscriptionMonthlyBase', parseFloat(e.target.value))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            />
+                          ) : (
+                            <div className="font-semibold text-gray-900">{formatCurrency(config.subscriptionMonthlyBase)}</div>
+                          )}
+                        </div>
+                      )}
+
+                      {config.packageType === 'APIPackage' && (
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Price per API Call (đ)
+                          </label>
+                          {isEditing ? (
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={data?.apiPricePerCall || ''}
+                              onChange={(e) => updateFormField(config.pricingId, 'apiPricePerCall', parseFloat(e.target.value))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            />
+                          ) : (
+                            <div className="font-semibold text-gray-900">{formatCurrency(config.apiPricePerCall)}</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Commission Split */}
+                    <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl p-4 mb-4">
+                      <div className="text-xs font-semibold text-gray-500 mb-3">REVENUE SPLIT</div>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">
+                            Provider Commission (%)
+                          </label>
+                          {isEditing ? (
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={data?.providerCommissionPercent || ''}
+                              onChange={(e) => updateFormField(config.pricingId, 'providerCommissionPercent', parseFloat(e.target.value))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            />
+                          ) : (
+                            <div className="font-bold text-green-600">{config.providerCommissionPercent}%</div>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">
+                            Admin Commission (%)
+                          </label>
+                          {isEditing ? (
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={data?.adminCommissionPercent || ''}
+                              onChange={(e) => updateFormField(config.pricingId, 'adminCommissionPercent', parseFloat(e.target.value))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            />
+                          ) : (
+                            <div className="font-bold text-blue-600">{config.adminCommissionPercent}%</div>
+                          )}
+                        </div>
+                        {isEditing && data && (
+                          <div className={`text-xs p-2 rounded ${
+                            Math.abs((data.providerCommissionPercent + data.adminCommissionPercent) - 100) < 0.01
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            Total: {(data.providerCommissionPercent + data.adminCommissionPercent).toFixed(2)}%
+                            {Math.abs((data.providerCommissionPercent + data.adminCommissionPercent) - 100) < 0.01 ? ' ✓' : ' (Must = 100%)'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    {isEditing ? (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleCancel(config.pricingId)}
+                          disabled={isSaving}
+                          className="flex-1 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-200 transition-colors disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => handleSave(config.pricingId)}
+                          disabled={isSaving}
+                          className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50"
+                        >
+                          {isSaving ? 'Saving...' : 'Save'}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleEdit(config.pricingId)}
+                        className="w-full bg-blue-50 text-blue-600 px-4 py-2 rounded-lg font-semibold hover:bg-blue-100 transition-colors"
+                      >
+                        Edit
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <div className="font-semibold mb-2">Tính năng:</div>
-                  {(cfg.api.meta.features || []).map((feature, idx) => (
-                    <div key={idx} className="flex items-start gap-2 text-sm">
-                      <span className="text-green-500 mt-0.5">✓</span>
-                      <span className="text-gray-700">{feature}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* One-time */}
-              <div className="card hover:shadow-xl transition-shadow relative">
-                <button
-                  onClick={() => openEditor('oneTime')}
-                  className="absolute right-3 top-3 text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  ✏️ Sửa
-                </button>
-                <div className="text-center mb-4">
-                  <div className="text-5xl mb-3">📁</div>
-                  <h2 className="text-2xl font-bold mb-2">{cfg.oneTime.meta.title}</h2>
-                  <p className="text-gray-600 text-sm">{renderOneTimeDesc()}</p>
-                </div>
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg mb-4 text-center">
-                  <div>
-                    <div className="text-3xl font-bold text-blue-700">${cfg.oneTime.priceUSD.toFixed(0)}</div>
-                    <div className="text-sm text-gray-600 mt-1">mỗi lần</div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="font-semibold mb-2">Tính năng:</div>
-                  {(cfg.oneTime.meta.features || []).map((feature, idx) => (
-                    <div key={idx} className="flex items-start gap-2 text-sm">
-                      <span className="text-green-500 mt-0.5">✓</span>
-                      <span className="text-gray-700">{feature}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Monthly */}
-              <div className="card hover:shadow-xl transition-shadow relative">
-                <button
-                  onClick={() => openEditor('monthly')}
-                  className="absolute right-3 top-3 text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  ✏️ Sửa
-                </button>
-                <div className="text-center mb-4">
-                  <div className="text-5xl mb-3">🌍</div>
-                  <h2 className="text-2xl font-bold mb-2">{cfg.monthly.meta.title}</h2>
-                  <p className="text-gray-600 text-sm">{cfg.monthly.meta.description}</p>
-                </div>
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg mb-4 text-center">
-                  <div>
-                    <div className="text-3xl font-bold text-blue-700">
-                      {minMonthly ? `$${minMonthly.pricePerRegionPerMonthUSD.toFixed(0)}` : '$—'}
-                    </div>
-                    <div className="text-sm text-gray-600 mt-1">giá thấp nhất / khu vực / tháng</div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="font-semibold mb-2">Kỳ hạn &amp; đơn giá:</div>
-                  {(cfg.monthly.options || []).map((o) => (
-                    <div key={o.months} className="flex items-start gap-2 text-sm">
-                      <span className="text-green-500 mt-0.5">•</span>
-                      <span className="text-gray-700">
-                        {TERM_LABEL[o.months]} — ${o.pricePerRegionPerMonthUSD}/khu vực/tháng
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <div className="space-y-2 mt-3">
-                  <div className="font-semibold mb-2">Tính năng:</div>
-                  {(cfg.monthly.meta.features || []).map((feature, idx) => (
-                    <div key={idx} className="flex items-start gap-2 text-sm">
-                      <span className="text-green-500 mt-0.5">✓</span>
-                      <span className="text-gray-700">{feature}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Revenue share */}
-            <div className="card bg-blue-50 border-blue-200 relative">
-              <button
-                onClick={() => openEditor('commission')}
-                className="absolute right-3 top-3 text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
-              >
-                ✏️ Sửa
-              </button>
-              <h2 className="text-xl font-bold mb-4">💼 Chính sách chia sẻ doanh thu</h2>
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="font-semibold mb-2">Data Provider nhận</h3>
-                  <ul className="space-y-2 text-sm text-gray-700">
-                    <li>• <span className="font-semibold">{providerPercent}%</span> doanh thu từ bán dữ liệu</li>
-                    <li>• Thanh toán hàng tháng vào ngày 1</li>
-                    <li>• Báo cáo chi tiết giao dịch</li>
-                    <li>• Không phí ẩn</li>
-                  </ul>
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-2">Nền tảng giữ lại</h3>
-                  <ul className="space-y-2 text-sm text-gray-700">
-                    <li>• <span className="font-semibold">{cfg.commission.platformPercent}%</span> phí dịch vụ nền tảng</li>
-                    <li>• Bao gồm: hosting, API, payment gateway, support</li>
-                    <li>• Marketing &amp; promotion</li>
-                    <li>• Quality assurance</li>
-                  </ul>
-                </div>
-              </div>
-              <div className="text-xs text-gray-500 mt-3">
-                Cập nhật lần cuối: {new Date(cfg.updatedAt).toLocaleString()}
-              </div>
-            </div>
-
-            <div className="mt-6 text-center space-x-2">
-              <button onClick={copyForProvider} className="btn-primary">
-                📋 Sao chép bảng giá cho Provider
-              </button>
-              {copied && <span className="text-green-600 text-sm">Đã sao chép!</span>}
-            </div>
-          </>
+              )
+            })}
+          </div>
         )}
 
-        {/* Modal Editor — chỉnh theo từng gói, bao gồm mô tả & tính năng */}
-        {editTarget && draft && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/40" onClick={closeEditor} />
-            <div className="relative bg-white w-full max-w-2xl rounded-xl p-6 shadow-xl">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">
-                  {editTarget === 'api' && 'Sửa gói API'}
-                  {editTarget === 'oneTime' && 'Sửa gói mua 1 lần'}
-                  {editTarget === 'monthly' && 'Sửa gói tháng'}
-                  {editTarget === 'commission' && 'Sửa chính sách chia sẻ doanh thu'}
-                </h3>
-                <button onClick={closeEditor} className="text-gray-500 hover:text-gray-700">✖</button>
+        {/* Info Cards */}
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
+            <h3 className="text-xl font-bold mb-4 flex items-center">
+              <svg className="w-6 h-6 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              SystemPricing Overview
+            </h3>
+            <ul className="space-y-2 text-sm text-gray-700">
+              <li className="flex items-start">
+                <span className="text-blue-600 mr-2">•</span>
+                <span>3 package types: DataPackage, SubscriptionPackage, APIPackage</span>
+              </li>
+              <li className="flex items-start">
+                <span className="text-blue-600 mr-2">•</span>
+                <span>Each package has different pricing model</span>
+              </li>
+              <li className="flex items-start">
+                <span className="text-blue-600 mr-2">•</span>
+                <span>Revenue split percentages must total 100%</span>
+              </li>
+              <li className="flex items-start">
+                <span className="text-blue-600 mr-2">•</span>
+                <span>Toggle active/inactive to control availability</span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 border border-green-100">
+            <h3 className="text-xl font-bold mb-4 flex items-center">
+              <svg className="w-6 h-6 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Revenue Distribution
+            </h3>
+            <div className="space-y-3 text-sm text-gray-700">
+              <div className="bg-white rounded-lg p-3">
+                <div className="font-semibold mb-1">DataPackage</div>
+                <div className="text-xs text-gray-500">Providers split by row count contribution</div>
               </div>
-
-              {/* API editor */}
-              {editTarget === 'api' && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm mb-1">Tiêu đề</label>
-                    <input className="input" value={draft.api.meta.title}
-                      onChange={(e) => setMeta('api', { title: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="block text-sm mb-1">Mô tả</label>
-                    <textarea className="textarea" rows={2} value={draft.api.meta.description || ''}
-                      onChange={(e) => setMeta('api', { description: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="block text-sm mb-1">Giá / request (USD)</label>
-                    <input type="number" step="0.001" min={0} className="input"
-                      value={draft.api.pricePerRequest}
-                      onChange={(e) => setDraft({ ...draft, api: { ...draft.api, pricePerRequest: Number(e.target.value) } })}/>
-                  </div>
-                  <div>
-                    <div className="font-semibold mb-2">Tính năng</div>
-                    {(draft.api.meta.features || []).map((f, i) => (
-                      <div key={i} className="flex gap-2 mb-2">
-                        <input className="input flex-1" value={f} onChange={(e) => setFeature('api', i, e.target.value)} />
-                        <button className="btn-secondary" onClick={() => removeFeature('api', i)}>Xóa</button>
-                      </div>
-                    ))}
-                    <button className="btn-secondary" onClick={() => addFeature('api')}>+ Thêm dòng</button>
-                  </div>
-                </div>
-              )}
-
-              {/* One-time editor */}
-              {editTarget === 'oneTime' && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm mb-1">Tiêu đề</label>
-                    <input className="input" value={draft.oneTime.meta.title}
-                      onChange={(e) => setMeta('oneTime', { title: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="block text-sm mb-1">Mô tả (có thể dùng {`{lookbackDays}`})</label>
-                    <textarea className="textarea" rows={2} value={draft.oneTime.meta.description || ''}
-                      onChange={(e) => setMeta('oneTime', { description: e.target.value })} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm mb-1">Giá (USD)</label>
-                      <input type="number" min={0} step="1" className="input"
-                        value={draft.oneTime.priceUSD}
-                        onChange={(e) => setDraft({ ...draft, oneTime: { ...draft.oneTime, priceUSD: Number(e.target.value) } })}/>
-                    </div>
-                    <div>
-                      <label className="block text-sm mb-1">Số ngày lookback</label>
-                      <input type="number" min={1} step="1" className="input"
-                        value={draft.oneTime.lookbackDays}
-                        onChange={(e) => setDraft({ ...draft, oneTime: { ...draft.oneTime, lookbackDays: Number(e.target.value) } })}/>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="font-semibold mb-2">Tính năng</div>
-                    {(draft.oneTime.meta.features || []).map((f, i) => (
-                      <div key={i} className="flex gap-2 mb-2">
-                        <input className="input flex-1" value={f} onChange={(e) => setFeature('oneTime', i, e.target.value)} />
-                        <button className="btn-secondary" onClick={() => removeFeature('oneTime', i)}>Xóa</button>
-                      </div>
-                    ))}
-                    <button className="btn-secondary" onClick={() => addFeature('oneTime')}>+ Thêm dòng</button>
-                  </div>
-                </div>
-              )}
-
-              {/* Monthly editor */}
-              {editTarget === 'monthly' && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm mb-1">Tiêu đề</label>
-                    <input className="input" value={draft.monthly.meta.title}
-                      onChange={(e) => setMeta('monthly', { title: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="block text-sm mb-1">Mô tả</label>
-                    <textarea className="textarea" rows={2} value={draft.monthly.meta.description || ''}
-                      onChange={(e) => setMeta('monthly', { description: e.target.value })} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    {[1, 3, 6, 9, 12].map((m) => {
-                      const opt = draft.monthly.options.find((o) => o.months === (m as MonthlyTerm))
-                      return (
-                        <div key={m}>
-                          <label className="block text-sm mb-1">{TERM_LABEL[m as MonthlyTerm]} — USD/khu vực/tháng</label>
-                          <input type="number" min={0} step="1" className="input"
-                            value={opt ? opt.pricePerRegionPerMonthUSD : 0}
-                            onChange={(e) => setMonthlyPrice(m as MonthlyTerm, Number(e.target.value))}/>
-                        </div>
-                      )
-                    })}
-                  </div>
-                  <div>
-                    <div className="font-semibold mb-2">Tính năng</div>
-                    {(draft.monthly.meta.features || []).map((f, i) => (
-                      <div key={i} className="flex gap-2 mb-2">
-                        <input className="input flex-1" value={f} onChange={(e) => setFeature('monthly', i, e.target.value)} />
-                        <button className="btn-secondary" onClick={() => removeFeature('monthly', i)}>Xóa</button>
-                      </div>
-                    ))}
-                    <button className="btn-secondary" onClick={() => addFeature('monthly')}>+ Thêm dòng</button>
-                  </div>
-                </div>
-              )}
-
-              {/* Commission editor */}
-              {editTarget === 'commission' && (
-                <div>
-                  <label className="block text-sm mb-1">Nền tảng giữ lại (%)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step="1"
-                    value={draft.commission.platformPercent}
-                    onChange={(e) =>
-                      setDraft({ ...draft, commission: { platformPercent: Number(e.target.value) } })
-                    }
-                    className="input"
-                  />
-                  <div className="text-sm text-gray-600 mt-1">
-                    Provider nhận: <b>{Math.max(0, 100 - Number(draft.commission.platformPercent))}%</b>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-2 mt-6">
-                <button className="btn-secondary" onClick={closeEditor}>Hủy</button>
-                <button className="btn-primary" onClick={saveCurrent}>Lưu</button>
+              <div className="bg-white rounded-lg p-3">
+                <div className="font-semibold mb-1">SubscriptionPackage</div>
+                <div className="text-xs text-gray-500">Equal split among all providers in province</div>
+              </div>
+              <div className="bg-white rounded-lg p-3">
+                <div className="font-semibold mb-1">APIPackage</div>
+                <div className="text-xs text-gray-500">Equal split among all providers</div>
               </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
-    </DashboardLayout>
+    </AdminLayout>
   )
 }

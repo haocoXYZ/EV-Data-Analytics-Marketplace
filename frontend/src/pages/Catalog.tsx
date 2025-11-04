@@ -1,222 +1,227 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import ConsumerLayout from '../components/ConsumerLayout'
-import datasetsData from '../data/datasets.json'
-import { useAuth } from '../contexts/AuthContext'
-
-type RoleGuarded = 'admin' | 'provider' | 'consumer' | 'guest'
-
-// Kiểu dữ liệu dataset theo datasets.json (providerId là optional)
-type Dataset = {
-  id: string
-  name: string
-  provider: string
-  category: string
-  tags?: string[]
-  regions?: string[]
-  description: string
-  status: 'approved' | 'pending' | 'kyc' | 'suspended'
-  rating?: number
-  totalDownloads?: number
-  lastUpdated?: string
-  packages?: { file?: boolean; api?: boolean; subscription?: boolean }
-  sampleData?: { totalRecords?: number; dateRange?: string; updateFrequency?: string }
-  providerId?: string
-}
-
-// Ép kiểu dữ liệu JSON
-const data = datasetsData as { datasets: Dataset[] }
+import { datasetsApi } from '../api'
 
 export default function Catalog() {
-  const { user } = useAuth()
-  const role: RoleGuarded = (user?.role as RoleGuarded) || 'guest'
-
-  const myId = user?.id || user?.email || ''                 // tuỳ schema Auth
-  const myBrand: string = String(user?.name ?? user?.email ?? '')
-  const norm = (s?: string) => (s ?? '').trim().toLowerCase()
-
-  // Xác định quyền sở hữu dataset cho provider
-  const isOwner = (ds: Dataset) =>
-    ds.providerId ? ds.providerId === myId : norm(ds.provider) === norm(myBrand)
-
-  // ====== Filters state ======
+  const [datasets, setDatasets] = useState<any[]>([])
+  const [filteredDatasets, setFilteredDatasets] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
-  const [selectedRegion, setSelectedRegion] = useState('')
 
-  // ====== Phạm vi theo role ======
-  const scopedDatasets = useMemo(() => {
-    const all = data.datasets
-    if (role === 'admin') return all
-    if (role === 'provider') return all.filter(d => d.status === 'approved' || isOwner(d))
-    return all.filter(d => d.status === 'approved') // consumer/guest
-  }, [role, myId, myBrand])
+  const categories = [
+    'All',
+    'Charging Stations',
+    'Battery Data',
+    'Routing',
+    'Infrastructure',
+    'Grid Impact',
+    'User Behavior',
+    'Maintenance',
+    'Network Planning'
+  ]
 
-  // ====== Options cho category/region ======
-  const categories = useMemo(() => {
-    const s = new Set<string>()
-    scopedDatasets.forEach(d => s.add(d.category))
-    return Array.from(s).sort()
-  }, [scopedDatasets])
+  useEffect(() => {
+    loadDatasets()
+  }, [])
 
-  const regions = useMemo(() => {
-    const s = new Set<string>()
-    scopedDatasets.forEach(d => (d.regions || []).forEach(r => s.add(r)))
-    return Array.from(s).sort()
-  }, [scopedDatasets])
+  useEffect(() => {
+    filterDatasets()
+  }, [datasets, searchTerm, selectedCategory])
 
-  // ====== Áp filter ======
-  const datasets = useMemo(() => {
-    const q = norm(searchTerm)
-    return scopedDatasets.filter(ds => {
-      const matchSearch =
-        !q ||
-        norm(ds.name).includes(q) ||
-        norm(ds.description).includes(q) ||
-        norm(ds.provider).includes(q) ||
-        (ds.tags || []).some(t => norm(t).includes(q))
+  const loadDatasets = async () => {
+    try {
+      setLoading(true)
+      const data = await datasetsApi.getAll()
+      setDatasets(data)
+    } catch (error) {
+      console.error('Failed to load datasets:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
-      const matchCat = !selectedCategory || ds.category === selectedCategory
-      const matchReg = !selectedRegion || (ds.regions || []).includes(selectedRegion)
-      return matchSearch && matchCat && matchReg
-    })
-  }, [scopedDatasets, searchTerm, selectedCategory, selectedRegion])
+  const filterDatasets = () => {
+    let filtered = [...datasets]
 
-  // ====== CTA theo role ======
-  const DatasetActions = ({ ds }: { ds: Dataset }) => {
-    const owner = role === 'provider' && isOwner(ds)
+    // Filter by category
+    if (selectedCategory && selectedCategory !== 'All') {
+      filtered = filtered.filter(d => d.category === selectedCategory)
+    }
 
-    if (role === 'admin') {
-      return (
-        <div className="flex items-center gap-3">
-          <Link to={`/moderator/review?datasetId=${ds.id}`} className="text-blue-600 hover:underline">
-            Moderate
-          </Link>
-          <span className="text-xs text-gray-500">status: {ds.status}</span>
-        </div>
+    // Filter by search
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase()
+      filtered = filtered.filter(d =>
+        d.name?.toLowerCase().includes(term) ||
+        d.description?.toLowerCase().includes(term) ||
+        d.providerName?.toLowerCase().includes(term)
       )
     }
 
-    if (owner) {
-      return (
-        <div className="flex items-center gap-3">
-          <Link to={`/provider/datasets/${ds.id}/edit`} className="text-blue-600 hover:underline">
-            Edit listing
-          </Link>
-          <Link to={`/provider/earnings?datasetId=${ds.id}`} className="text-blue-600 hover:underline">
-            View sales
-          </Link>
-          {ds.status !== 'approved' && <span className="text-xs text-orange-500">({ds.status})</span>}
-        </div>
-      )
-    }
+    // Sort by newest
+    filtered.sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime())
 
-    if (role === 'consumer') {
-      // Đưa tới trang chi tiết để chọn gói -> DatasetDetail sẽ set pendingOrder rồi navigate('/checkout')
-      return (
-        <Link to={`/dataset/${ds.id}`} className="text-blue-600 hover:underline">
-          View & Buy
-        </Link>
-      )
-    }
-
-    // guest
-    return (
-      <Link to={`/login?next=/dataset/${ds.id}`} className="text-blue-600 hover:underline">
-        Login để mua
-      </Link>
-    )
+    setFilteredDatasets(filtered)
   }
 
   return (
     <ConsumerLayout>
-      {/* ===== Filters ===== */}
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end">
-        <div className="flex-1">
-          <label className="block text-sm font-medium mb-1">Search</label>
-          <input
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            placeholder="Dataset name, description, provider, tags..."
-            className="w-full rounded border px-3 py-2"
-          />
+      <div className="bg-gray-50 min-h-screen">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h1 className="text-4xl font-bold mb-3">Danh sách Datasets</h1>
+            <p className="text-blue-100 text-lg">Khám phá dữ liệu có sẵn từ các nhà cung cấp</p>
+          </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Category</label>
-          <select
-            value={selectedCategory}
-            onChange={e => setSelectedCategory(e.target.value)}
-            className="w-56 rounded border px-3 py-2"
-          >
-            <option value="">All</option>
-            {categories.map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">Region</label>
-          <select
-            value={selectedRegion}
-            onChange={e => setSelectedRegion(e.target.value)}
-            className="w-56 rounded border px-3 py-2"
-          >
-            <option value="">All</option>
-            {regions.map(r => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div className="mb-3 text-sm text-gray-600">
-        Found <b>{datasets.length}</b> dataset{datasets.length !== 1 ? 's' : ''}
-      </div>
-
-      {/* ===== Grid ===== */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {datasets.map(ds => (
-          <div key={ds.id} className="border rounded-lg p-4 hover:shadow-sm transition">
-            <Link to={`/dataset/${ds.id}`}><h3 className="font-semibold text-lg">{ds.name}</h3></Link>
-            <p className="text-sm text-gray-600">{ds.provider}</p>
-
-            <div className="mt-2 flex flex-wrap gap-2">
-              <span className="text-xs rounded bg-gray-100 px-2 py-1">{ds.category}</span>
-              {(ds.tags || []).slice(0, 3).map(t => (
-                <span key={t} className="text-xs rounded bg-gray-100 px-2 py-1">#{t}</span>
-              ))}
-              {role !== 'consumer' && role !== 'guest' && (
-                <span className="text-xs rounded bg-gray-100 px-2 py-1">status: {ds.status}</span>
-              )}
-            </div>
-
-            <p className="text-sm mt-2 line-clamp-2">{ds.description}</p>
-
-            <div className="mt-3 flex items-center gap-3 text-xs text-gray-600">
-              {ds.rating ? <span>⭐ {ds.rating}</span> : null}
-              {typeof ds.totalDownloads === 'number' ? <span>⬇ {ds.totalDownloads}</span> : null}
-              {ds.packages && (
-                <span className="ml-auto flex gap-2">
-                  {ds.packages.file && <span className="rounded bg-gray-100 px-2 py-0.5">File</span>}
-                  {ds.packages.api && <span className="rounded bg-gray-100 px-2 py-0.5">API</span>}
-                  {ds.packages.subscription && <span className="rounded bg-gray-100 px-2 py-0.5">Subscription</span>}
-                </span>
-              )}
-            </div>
-
-            {/* CTA theo role */}
-            <div className="mt-3">
-              <DatasetActions ds={ds} />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Info Notice */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-8">
+            <div className="flex items-start gap-3">
+              <svg className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <h3 className="font-semibold text-blue-900 mb-1">Dữ liệu được mua theo địa điểm, không phải từng dataset riêng lẻ</h3>
+                <p className="text-sm text-blue-800">
+                  Xem danh sách để biết dữ liệu nào có sẵn. Để mua, chọn tỉnh thành và quận huyện cần thiết.
+                </p>
+                <Link 
+                  to="/buy-data" 
+                  className="inline-block mt-2 text-blue-700 font-semibold text-sm hover:underline"
+                >
+                  Mua dữ liệu theo địa điểm →
+                </Link>
+              </div>
             </div>
           </div>
-        ))}
-      </div>
 
-      {datasets.length === 0 && (
-        <div className="text-center text-gray-500 py-12">Không có kết quả phù hợp</div>
-      )}
+          {/* Search & Filter Bar */}
+          <div className="bg-white rounded-2xl shadow-lg p-6 mb-8 border border-gray-100">
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Search */}
+              <div className="md:col-span-2">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Tìm kiếm datasets..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Category Filter */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat === 'All' ? '' : cat)}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+                    (cat === 'All' && !selectedCategory) || selectedCategory === cat
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Results Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="text-gray-600">
+              Tìm thấy <span className="font-semibold text-gray-900">{filteredDatasets.length}</span> datasets
+            </div>
+          </div>
+
+          {/* Datasets Grid */}
+          {loading ? (
+            <div className="grid md:grid-cols-3 gap-6">
+              {[1, 2, 3, 4, 5, 6].map(i => (
+                <div key={i} className="bg-white rounded-2xl shadow-lg p-6 animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
+                  <div className="h-3 bg-gray-200 rounded w-full mb-2"></div>
+                  <div className="h-3 bg-gray-200 rounded w-2/3 mb-4"></div>
+                  <div className="h-10 bg-gray-200 rounded"></div>
+                </div>
+              ))}
+            </div>
+          ) : filteredDatasets.length > 0 ? (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredDatasets.map((dataset) => (
+                <Link
+                  key={dataset.datasetId}
+                  to={`/dataset/${dataset.datasetId}`}
+                  className="group bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-100 hover:border-blue-300"
+                >
+                  <div className="p-6">
+                    <div className="flex items-start justify-between mb-3">
+                      <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+                        {dataset.category}
+                      </span>
+                      <span className="text-2xl">📊</span>
+                    </div>
+
+                    <h3 className="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors mb-2 line-clamp-2">
+                      {dataset.name}
+                    </h3>
+
+                    <p className="text-gray-600 text-sm line-clamp-3 mb-4">
+                      {dataset.description || 'Không có mô tả'}
+                    </p>
+
+                    <div className="space-y-2 mb-4">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-500 flex items-center gap-1">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                          </svg>
+                          {dataset.rowCount?.toLocaleString() || 0} bản ghi
+                        </span>
+                        <span className="text-gray-500 text-xs">
+                          {new Date(dataset.uploadDate).toLocaleDateString('vi-VN')}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                      <div className="text-xs text-gray-500">
+                        {dataset.providerName}
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 rounded-lg font-semibold text-center group-hover:shadow-lg transition-all">
+                        Xem chi tiết →
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl shadow-lg p-12 text-center border border-gray-100">
+              <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Không tìm thấy datasets</h3>
+              <p className="text-gray-600">Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm</p>
+            </div>
+          )}
+        </div>
+      </div>
     </ConsumerLayout>
   )
 }

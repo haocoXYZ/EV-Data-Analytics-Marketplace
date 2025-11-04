@@ -1,476 +1,337 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import DashboardLayout from '../components/DashboardLayout'
+import toast from 'react-hot-toast'
+import ProviderLayout from '../components/ProviderLayout'
+import { datasetsApi } from '../api'
 
 export default function ProviderNew() {
   const navigate = useNavigate()
-  const [currentStep, setCurrentStep] = useState(1)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [file, setFile] = useState<File | null>(null)
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false)
   
   const [formData, setFormData] = useState({
-    // Basic Info
     name: '',
-    provider: '',
-    category: '',
     description: '',
-    regions: [] as string[],
-    
-    // Data Details
-    totalRecords: '',
-    dateRange: '',
-    updateFrequency: 'monthly',
-    dataFormat: 'csv',
-    
-    // Schema Fields
-    schemaFields: [
-      { name: '', type: 'string', description: '' }
-    ],
-    
-    // Sample Data
-    sampleData: '',
-    
-    // Pricing & Packages
-    file: false,
-    api: false,
-    subscription: false,
-    filePrice: '50',
-    apiPricePerRequest: '0.10',
-    subscriptionPrice: '100',
-    
-    // Quality Indicators
-    accuracy: '95',
-    completeness: '98',
-    updateLatency: '24h',
-    documentation: false,
-    support: 'email'
+    category: ''
   })
 
-  const categories = ['charging_stations', 'battery_data', 'routing', 'infrastructure', 'grid_impact', 'user_behavior', 'maintenance', 'network_planning']
-  const regionOptions = ['Hồ Chí Minh', 'Hà Nội', 'Đà Nẵng', 'Cần Thơ', 'Bình Dương', 'Đồng Nai', 'Bình Thuận', 'Toàn quốc']
-  const dataTypes = ['string', 'number', 'datetime', 'boolean', 'json', 'geolocation']
-  const updateFrequencies = ['realtime', 'hourly', 'daily', 'weekly', 'monthly', 'quarterly']
+  const categories = [
+    'Charging Station Data',
+    'Vehicle Data',
+    'Infrastructure',
+    'Other'
+  ]
+
+  const handleDownloadTemplate = async () => {
+    try {
+      setDownloadingTemplate(true)
+      const blob = await datasetsApi.downloadTemplate()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'dataset_template.csv'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error: any) {
+      toast.error('Lỗi download template: ' + error.message)
+    } finally {
+      setDownloadingTemplate(false)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const selectedFile = e.target.files[0]
+      if (!selectedFile.name.toLowerCase().endsWith('.csv')) {
+        toast.error('Vui lòng chọn file CSV!')
+        return
+      }
+      setFile(selectedFile)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (currentStep < 4) {
-      setCurrentStep(currentStep + 1)
+    if (!file) {
+      toast.error('Vui lòng chọn file CSV!')
       return
     }
 
-    setIsSubmitting(true)
-    
-    // Simulate submission
-    await new Promise(resolve => setTimeout(resolve, 1500))
-
-    const datasetSubmission = {
-      ...formData,
-      submittedAt: new Date().toISOString(),
-      status: 'pending_review',
-      submissionId: 'SUB-' + Date.now()
+    if (!formData.name.trim()) {
+      toast.error('Vui lòng nhập tên dataset!')
+      return
     }
 
-    // Save to localStorage
-    const submissions = JSON.parse(localStorage.getItem('datasetSubmissions') || '[]')
-    submissions.push(datasetSubmission)
-    localStorage.setItem('datasetSubmissions', JSON.stringify(submissions))
+    if (!formData.category) {
+      toast.error('Vui lòng chọn danh mục!')
+      return
+    }
 
-    setIsSubmitting(false)
-    alert('Dataset submitted for review! ID: ' + datasetSubmission.submissionId)
-    navigate('/provider/dashboard')
+    setUploading(true)
+    
+    try {
+      const uploadData = new FormData()
+      uploadData.append('Name', formData.name)
+      uploadData.append('Description', formData.description)
+      uploadData.append('Category', formData.category)
+      uploadData.append('CsvFile', file)
+
+      const result = await datasetsApi.upload(uploadData)
+      
+      toast.success(`Dataset "${result.name}" đã được upload thành công! (${result.rowCount} records). Đang chờ moderator review.`, {
+        duration: 5000
+      })
+      
+      setTimeout(() => {
+        navigate('/provider/dashboard')
+      }, 2000)
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.message
+      toast.error('Lỗi upload: ' + errorMsg)
+    } finally {
+      setUploading(false)
+    }
   }
-
-  const toggleRegion = (region: string) => {
-    setFormData(prev => ({
-      ...prev,
-      regions: prev.regions.includes(region)
-        ? prev.regions.filter(r => r !== region)
-        : [...prev.regions, region]
-    }))
-  }
-
-  const addSchemaField = () => {
-    setFormData(prev => ({
-      ...prev,
-      schemaFields: [...prev.schemaFields, { name: '', type: 'string', description: '' }]
-    }))
-  }
-
-  const updateSchemaField = (index: number, field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      schemaFields: prev.schemaFields.map((f, i) => 
-        i === index ? { ...f, [field]: value } : f
-      )
-    }))
-  }
-
-  const removeSchemaField = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      schemaFields: prev.schemaFields.filter((_, i) => i !== index)
-    }))
-  }
-
-  const stepTitles = ['Thông tin cơ bản', 'Chi tiết dữ liệu', 'Schema & Giá', 'Xem lại & Gửi']
 
   return (
-    <DashboardLayout>
+    <ProviderLayout>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-4xl font-bold mb-2">Đăng ký bán dữ liệu</h1>
-        <p className="text-gray-600 mb-8">
-          Trở thành nhà cung cấp dữ liệu trạm sạc và nhận 70% doanh thu
-        </p>
-
-        {/* Progress Bar */}
         <div className="mb-8">
-          <div className="flex justify-between items-center mb-2">
-            {stepTitles.map((title, i) => (
-              <div key={i} className="flex-1 text-center">
-                <div className={`inline-flex items-center justify-center w-10 h-10 rounded-full font-semibold mb-2 ${
-                  i + 1 <= currentStep
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-600'
-                }`}>
-                  {i + 1}
-                </div>
-                <div className={`text-xs font-medium ${
-                  i + 1 <= currentStep ? 'text-blue-600' : 'text-gray-600'
-                }`}>
-                  {title}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div className={`h-full bg-blue-600 transition-all`}
-              style={{ width: `${(currentStep / 4) * 100}%` }}
-            />
-          </div>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">
+            Upload Dataset
+          </h1>
+          <p className="text-gray-600">
+            Cung cấp dữ liệu lên nền tảng và nhận phần trăm doanh thu
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="card space-y-6">
-          {/* STEP 1: Basic Info */}
-          {currentStep === 1 && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold">Thông tin cơ bản</h2>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Template Download Card */}
+          <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-2xl shadow-lg p-6 border-2 border-purple-200">
+            <h2 className="text-xl font-bold mb-4 flex items-center">
+              <span className="w-8 h-8 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mr-3 text-sm font-bold">1</span>
+              Download CSV Template
+            </h2>
+            <div className="space-y-3">
+              <p className="text-sm text-gray-700">
+                📥 Download template, fill in your EV charging data, then upload the completed CSV file.
+              </p>
+              <button
+                type="button"
+                onClick={handleDownloadTemplate}
+                disabled={downloadingTemplate}
+                className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50 inline-flex items-center justify-center"
+              >
+                {downloadingTemplate ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Downloading...
+                  </span>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Download CSV Template
+                  </>
+                )}
+              </button>
+              <div className="bg-white/60 rounded-lg p-3 text-xs text-gray-600">
+                <p className="font-semibold mb-1">ℹ️ Template includes:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>All required fields: StationId, StationName, ProvinceId, DistrictId, etc.</li>
+                  <li>Sample data showing the correct format</li>
+                  <li>Data validation guidelines</li>
+                </ul>
+              </div>
+            </div>
+          </div>
 
+          {/* Basic Info Card */}
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+            <h2 className="text-xl font-bold mb-4 flex items-center">
+              <span className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mr-3 text-sm font-bold">2</span>
+              Thông tin cơ bản
+            </h2>
+
+            <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Tên dataset *</label>
-                <input type="text" required value={formData.name} 
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" 
-                  placeholder="VD: Ho Chi Minh City Charging Station Network" />
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Tên Dataset <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="VD: Dữ liệu trạm sạc Hà Nội 2024"
+                />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Công ty / Tổ chức *</label>
-                <input type="text" required value={formData.provider} 
-                  onChange={(e) => setFormData({...formData, provider: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" 
-                  placeholder="Tên công ty" />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Danh mục *</label>
-                <select required value={formData.category} 
-                  onChange={(e) => setFormData({...formData, category: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Danh mục <span className="text-red-500">*</span>
+                </label>
+                <select
+                  required
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
                   <option value="">Chọn danh mục</option>
-                  {categories.map(cat => (<option key={cat} value={cat}>{cat.replace(/_/g, ' ')}</option>))}
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Mô tả chi tiết *</label>
-                <textarea required value={formData.description} 
-                  onChange={(e) => setFormData({...formData, description: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" 
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Mô tả
+                </label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   rows={4}
-                  placeholder="Mô tả dữ liệu: nguồn gốc, phương pháp thu thập, độ chính xác, trường hợp sử dụng..." />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Khu vực hỗ trợ *</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {regionOptions.map(region => (
-                    <label key={region} className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 rounded hover:bg-gray-50">
-                      <input type="checkbox" checked={formData.regions.includes(region)} 
-                        onChange={() => toggleRegion(region)} className="rounded text-blue-600" />
-                      <span className="text-sm">{region}</span>
-                    </label>
-                  ))}
-                </div>
+                  placeholder="Mô tả chi tiết về dataset: nguồn gốc, phương pháp thu thập, độ chính xác..."
+                />
               </div>
             </div>
-          )}
+          </div>
 
-          {/* STEP 2: Data Details */}
-          {currentStep === 2 && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold">Chi tiết dữ liệu</h2>
+          {/* File Upload Card */}
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+            <h2 className="text-xl font-bold mb-4 flex items-center">
+              <span className="w-8 h-8 bg-green-100 text-green-600 rounded-full flex items-center justify-center mr-3 text-sm font-bold">3</span>
+              Upload File CSV
+            </h2>
 
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Tổng số records *</label>
-                  <input type="number" required value={formData.totalRecords} 
-                    onChange={(e) => setFormData({...formData, totalRecords: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" 
-                    placeholder="1000000" />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Khoảng thời gian dữ liệu *</label>
-                  <input type="text" required value={formData.dateRange} 
-                    onChange={(e) => setFormData({...formData, dateRange: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" 
-                    placeholder="2023-2025" />
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Tần suất cập nhật *</label>
-                  <select required value={formData.updateFrequency} 
-                    onChange={(e) => setFormData({...formData, updateFrequency: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                    {updateFrequencies.map(freq => (
-                      <option key={freq} value={freq}>{freq.replace(/_/g, ' ')}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Định dạng dữ liệu *</label>
-                  <select required value={formData.dataFormat} 
-                    onChange={(e) => setFormData({...formData, dataFormat: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                    <option value="csv">CSV</option>
-                    <option value="json">JSON</option>
-                    <option value="parquet">Parquet</option>
-                    <option value="database">Database</option>
-                  </select>
-                </div>
-              </div>
-
+            <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Upload file CSV mẫu (100-1000 records) *</label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 cursor-pointer">
-                  <input type="file" accept=".csv" className="hidden" required />
-                  <div>
-                    <p className="text-sm text-gray-600">Kéo thả file hoặc nhấp để chọn</p>
-                    <p className="text-xs text-gray-500 mt-1">CSV, không quá 10MB</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 3: Schema & Pricing */}
-          {currentStep === 3 && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold">Schema & Giá cả</h2>
-
-              <div>
-                <div className="flex justify-between items-center mb-4">
-                  <label className="block text-sm font-medium text-gray-700">Các trường dữ liệu (Schema)</label>
-                  <button type="button" onClick={addSchemaField} className="text-sm text-blue-600 hover:text-blue-700">
-                    + Thêm trường
-                  </button>
-                </div>
-                <div className="space-y-3">
-                  {formData.schemaFields.map((field, i) => (
-                    <div key={i} className="flex gap-2">
-                      <input type="text" value={field.name} 
-                        onChange={(e) => updateSchemaField(i, 'name', e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" 
-                        placeholder="Tên trường" />
-                      <select value={field.type} 
-                        onChange={(e) => updateSchemaField(i, 'type', e.target.value)}
-                        className="w-32 px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                        {dataTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                      <button type="button" onClick={() => removeSchemaField(i)} className="px-3 py-2 text-red-600 hover:bg-red-50 rounded">
-                        Xóa
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="border-t pt-6">
-                <h3 className="font-semibold mb-4">Gói dịch vụ & Giá</h3>
-                <div className="space-y-4">
-                  <label className="flex items-center gap-3 p-3 border border-gray-200 rounded cursor-pointer hover:bg-gray-50">
-                    <input type="checkbox" checked={formData.file} 
-                      onChange={(e) => setFormData({...formData, file: e.target.checked})} 
-                      className="rounded text-blue-600 w-4 h-4" />
-                    <div className="flex-1">
-                      <div className="font-medium">Gói File</div>
-                      <div className="text-xs text-gray-600">Tải xuống CSV</div>
-                    </div>
-                    <input type="number" step="0.01" value={formData.filePrice} 
-                      onChange={(e) => setFormData({...formData, filePrice: e.target.value})}
-                      className="w-24 px-2 py-1 border border-gray-300 rounded text-sm" 
-                      placeholder="50" disabled={!formData.file} />
-                    <span className="text-sm">USD</span>
-                  </label>
-
-                  <label className="flex items-center gap-3 p-3 border border-gray-200 rounded cursor-pointer hover:bg-gray-50">
-                    <input type="checkbox" checked={formData.api} 
-                      onChange={(e) => setFormData({...formData, api: e.target.checked})} 
-                      className="rounded text-blue-600 w-4 h-4" />
-                    <div className="flex-1">
-                      <div className="font-medium">Gói API</div>
-                      <div className="text-xs text-gray-600">Theo lượt request</div>
-                    </div>
-                    <input type="number" step="0.01" value={formData.apiPricePerRequest} 
-                      onChange={(e) => setFormData({...formData, apiPricePerRequest: e.target.value})}
-                      className="w-24 px-2 py-1 border border-gray-300 rounded text-sm" 
-                      placeholder="0.10" disabled={!formData.api} />
-                    <span className="text-sm">USD/req</span>
-                  </label>
-
-                  <label className="flex items-center gap-3 p-3 border border-gray-200 rounded cursor-pointer hover:bg-gray-50">
-                    <input type="checkbox" checked={formData.subscription} 
-                      onChange={(e) => setFormData({...formData, subscription: e.target.checked})} 
-                      className="rounded text-blue-600 w-4 h-4" />
-                    <div className="flex-1">
-                      <div className="font-medium">Gói Theo dõi</div>
-                      <div className="text-xs text-gray-600">Truy cập không giới hạn/khu vực</div>
-                    </div>
-                    <input type="number" step="0.01" value={formData.subscriptionPrice} 
-                      onChange={(e) => setFormData({...formData, subscriptionPrice: e.target.value})}
-                      className="w-24 px-2 py-1 border border-gray-300 rounded text-sm" 
-                      placeholder="100" disabled={!formData.subscription} />
-                    <span className="text-sm">USD/tháng</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="border-t pt-6">
-                <h3 className="font-semibold mb-4">Chỉ số chất lượng</h3>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Độ chính xác (%)</label>
-                    <input type="number" value={formData.accuracy} 
-                      onChange={(e) => setFormData({...formData, accuracy: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
-                      min="0" max="100" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Tính hoàn chỉnh (%)</label>
-                    <input type="number" value={formData.completeness} 
-                      onChange={(e) => setFormData({...formData, completeness: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
-                      min="0" max="100" />
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Độ trễ cập nhật tối đa</label>
-                  <input type="text" value={formData.updateLatency} 
-                    onChange={(e) => setFormData({...formData, updateLatency: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg" 
-                    placeholder="24h" />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 4: Review */}
-          {currentStep === 4 && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold">Xem lại thông tin</h2>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-semibold mb-3">Thông tin cơ bản</h3>
-                  <div className="space-y-2 text-sm">
-                    <div><span className="text-gray-600">Tên:</span> {formData.name}</div>
-                    <div><span className="text-gray-600">Công ty:</span> {formData.provider}</div>
-                    <div><span className="text-gray-600">Danh mục:</span> {formData.category}</div>
-                    <div><span className="text-gray-600">Khu vực:</span> {formData.regions.join(', ') || 'Chưa chọn'}</div>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-semibold mb-3">Chi tiết dữ liệu</h3>
-                  <div className="space-y-2 text-sm">
-                    <div><span className="text-gray-600">Records:</span> {formData.totalRecords || '?'}</div>
-                    <div><span className="text-gray-600">Thời gian:</span> {formData.dateRange}</div>
-                    <div><span className="text-gray-600">Cập nhật:</span> {formData.updateFrequency}</div>
-                    <div><span className="text-gray-600">Định dạng:</span> {formData.dataFormat}</div>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-semibold mb-3">Gói dịch vụ</h3>
-                  <div className="space-y-1 text-sm">
-                    {formData.file && <div>File: ${formData.filePrice}</div>}
-                    {formData.api && <div>API: ${formData.apiPricePerRequest}/request</div>}
-                    {formData.subscription && <div>Theo dõi: ${formData.subscriptionPrice}/tháng</div>}
-                    {!formData.file && !formData.api && !formData.subscription && (
-                      <div className="text-red-600">Chưa chọn gói dịch vụ</div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  File dữ liệu <span className="text-red-500">*</span>
+                </label>
+                <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 transition-colors">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileChange}
+                    className="hidden"
+                    id="file-upload"
+                    required
+                  />
+                  <label htmlFor="file-upload" className="cursor-pointer">
+                    {file ? (
+                      <div className="text-green-600">
+                        <svg className="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p className="font-semibold">{file.name}</p>
+                        <p className="text-sm text-gray-500 mt-1">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <svg className="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <p className="text-gray-600 font-medium mb-1">Kéo thả file hoặc nhấp để chọn</p>
+                        <p className="text-sm text-gray-500">CSV file only, tối đa 100MB</p>
+                      </div>
                     )}
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-semibold mb-3">Chất lượng</h3>
-                  <div className="space-y-2 text-sm">
-                    <div><span className="text-gray-600">Chính xác:</span> {formData.accuracy}%</div>
-                    <div><span className="text-gray-600">Hoàn chỉnh:</span> {formData.completeness}%</div>
-                    <div><span className="text-gray-600">Độ trễ:</span> {formData.updateLatency}</div>
-                  </div>
+                  </label>
                 </div>
               </div>
 
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <div className="text-sm text-blue-800">
-                  Bằng cách gửi, bạn xác nhận rằng dữ liệu tuân thủ các quy định pháp luật và không vi phạm bất kỳ quyền nào.
-                </div>
+              <div className="bg-blue-50 rounded-lg p-4 text-sm text-blue-800">
+                <p className="font-semibold mb-2">ℹ️ Yêu cầu file CSV:</p>
+                <ul className="list-disc list-inside space-y-1 text-xs">
+                  <li>File must match the template structure</li>
+                  <li>All required fields must be present</li>
+                  <li>ProvinceId and DistrictId must exist in database</li>
+                  <li>Dates in format: yyyy-MM-dd HH:mm:ss</li>
+                  <li>Numeric fields must be valid numbers</li>
+                  <li>Maximum file size: 100MB</li>
+                </ul>
               </div>
             </div>
-          )}
+          </div>
 
-          {/* Navigation Buttons */}
-          <div className="flex gap-4 pt-6 border-t">
-            {currentStep > 1 && (
-              <button
-                type="button"
-                onClick={() => setCurrentStep(currentStep - 1)}
-                className="px-6 py-2 border border-gray-300 rounded-lg font-medium hover:bg-gray-50"
-              >
-                Quay lại
-              </button>
-            )}
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex-1 btn-primary disabled:opacity-50"
-            >
-              {isSubmitting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Đang gửi...
+          {/* Submit Card */}
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+            <h2 className="text-xl font-bold mb-4 flex items-center">
+              <span className="w-8 h-8 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mr-3 text-sm font-bold">4</span>
+              Xác nhận & Gửi
+            </h2>
+
+            <div className="space-y-4">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                <h3 className="font-semibold text-yellow-800 mb-2">⚠️ Lưu ý quan trọng</h3>
+                <ul className="text-sm text-yellow-700 space-y-1 list-disc list-inside">
+                  <li>Dataset sẽ được Moderator kiểm duyệt trong 24-48h</li>
+                  <li>Dataset phải tuân thủ quy định pháp luật về dữ liệu</li>
+                  <li>Dữ liệu phải chính xác và không chứa thông tin sai lệch</li>
+                  <li>Bạn có trách nhiệm với chất lượng dữ liệu</li>
+                </ul>
+              </div>
+
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" required className="mt-1 rounded text-blue-600" />
+                <span className="text-sm text-gray-700">
+                  Tôi xác nhận rằng dữ liệu tuân thủ các quy định pháp luật, không vi phạm quyền riêng tư và không chứa thông tin sai lệch.
                 </span>
-              ) : currentStep === 4 ? (
-                'Gửi để kiểm duyệt'
-              ) : (
-                'Tiếp tục'
-              )}
-            </button>
+              </label>
+
+              <div className="flex gap-4 pt-4">
+                <button
+                  type="button"
+                  onClick={() => navigate('/provider/dashboard')}
+                  className="flex-1 bg-gray-100 text-gray-700 px-6 py-3 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploading}
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50"
+                >
+                  {uploading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Đang upload...
+                    </span>
+                  ) : (
+                    'Upload Dataset'
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </form>
 
-        <div className="mt-8 p-4 bg-gray-50 rounded-lg text-sm text-gray-600">
-          <p className="font-semibold mb-2">Bạn sẽ nhận 70% doanh thu từ mỗi giao dịch. Thanh toán hàng tháng vào ngày 1.</p>
-          <p>Dataset của bạn sẽ được kiểm duyệt trong 24-48 giờ. Liên hệ support@evdata.vn nếu có thắc mắc.</p>
+        {/* Revenue Info */}
+        <div className="mt-6 bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-2xl p-6">
+          <h3 className="text-xl font-bold mb-3">💰 Cơ chế chia sẻ doanh thu</h3>
+          <p className="text-blue-100 text-sm mb-4">
+            Doanh thu được chia tự động dựa trên SystemPricing configuration cho từng package type.
+            Bạn sẽ nhận phần trăm theo cấu hình của Admin.
+          </p>
+          <div className="text-sm text-blue-100">
+            📅 Thanh toán hàng tháng vào ngày 1 qua chuyển khoản ngân hàng
+          </div>
         </div>
       </div>
-    </DashboardLayout>
+    </ProviderLayout>
   )
 }

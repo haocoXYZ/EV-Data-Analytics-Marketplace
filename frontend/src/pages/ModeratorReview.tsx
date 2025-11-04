@@ -1,601 +1,586 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import DashboardLayout from '../components/DashboardLayout'
-import datasetsData from '../data/datasets.json'
-
-// ===== Types khớp JSON hiện tại =====
-type Dataset = {
-  id: string
-  name: string
-  provider: string
-  category: string
-  regions: string[]
-  sampleData: { totalRecords: number; updateFrequency: string }
-  packages: { file?: boolean; api?: boolean; subscription?: boolean }
-  description: string
-  tags: string[]
-  status?: 'pending' | 'approved' | 'rejected'
-}
-
-type Checklist = {
-  sampleQuality: boolean
-  descriptionClear: boolean
-  providerVerified: boolean
-  noDuplicate: boolean
-}
-
-type DecisionStatus = 'approved' | 'rejected'
-type Decision = {
-  id: string
-  datasetId: string
-  datasetName: string
-  provider: string
-  category: string
-  packages: string[]
-  status: DecisionStatus
-  notes?: string
-  checklist: Checklist
-  moderator: string
-  decidedAt: string // ISO
-  restored?: boolean // đánh dấu nếu đã khôi phục lại hàng chờ
-}
-
-// ===== LocalStorage Keys =====
-const LS_DATASETS = 'ev.moderation.datasets'
-const LS_HISTORY = 'ev.moderation.decisions'
-
-// ===== Helpers =====
-const uid = (p = 'id') => `${p}_${Math.random().toString(36).slice(2, 8)}_${Date.now()}`
-const fmtInt = (n: number) => n.toLocaleString('en-US')
-const fmtDate = (iso: string) => new Date(iso).toLocaleString()
-const download = (filename: string, content: string, mime = 'text/csv;charset=utf-8;') => {
-  const blob = new Blob([content], { type: mime })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
-}
+import React, { useEffect, useState } from 'react'
+import toast from 'react-hot-toast'
+import ModeratorLayout from '../components/ModeratorLayout'
+import { moderationApi } from '../api'
+import { Dataset, DataPreviewResponse, DatasetModerationDetail } from '../types'
 
 export default function ModeratorReview() {
-  const [activeTab, setActiveTab] = useState<'review' | 'history'>('review')
-
-  // ===== Datasets (hàng chờ + trạng thái) =====
-  const [datasets, setDatasets] = useState<Dataset[]>(() => {
-    // ưu tiên dữ liệu đã lưu, fallback về JSON
-    try {
-      const stored = localStorage.getItem(LS_DATASETS)
-      if (stored) return JSON.parse(stored) as Dataset[]
-    } catch {}
-    const seeded: Dataset[] = (datasetsData as any).datasets.map((d: Dataset) => ({
-      ...d,
-      status: d.status ?? 'pending',
-    }))
-    localStorage.setItem(LS_DATASETS, JSON.stringify(seeded))
-    return seeded
-  })
+  const [datasets, setDatasets] = useState<Dataset[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedDataset, setSelectedDataset] = useState<DatasetModerationDetail | null>(null)
+  const [detailModal, setDetailModal] = useState(false)
+  const [reviewModal, setReviewModal] = useState(false)
+  const [action, setAction] = useState<'approve' | 'reject'>('approve')
+  const [comments, setComments] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [previewModal, setPreviewModal] = useState(false)
+  const [previewData, setPreviewData] = useState<DataPreviewResponse | null>(null)
+  const [loadingPreview, setLoadingPreview] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [downloading, setDownloading] = useState<number | null>(null)
 
   useEffect(() => {
-    localStorage.setItem(LS_DATASETS, JSON.stringify(datasets))
-  }, [datasets])
+    loadPendingDatasets()
+  }, [])
 
-  const pendingDatasets = useMemo(
-    () => datasets.filter((d) => d.status === 'pending'),
-    [datasets]
-  )
-
-  // ===== Checklist & Notes theo dataset (state cục bộ) =====
-  const [checks, setChecks] = useState<Record<string, Checklist>>({})
-  const [notesById, setNotesById] = useState<Record<string, string>>({})
-
-  const getChecks = (id: string): Checklist =>
-    checks[id] ?? {
-      sampleQuality: false,
-      descriptionClear: false,
-      providerVerified: false,
-      noDuplicate: false,
-    }
-
-  // ===== History (Approved/Rejected) =====
-  const [history, setHistory] = useState<Decision[]>(() => {
+  const loadPendingDatasets = async () => {
     try {
-      const raw = localStorage.getItem(LS_HISTORY)
-      return raw ? (JSON.parse(raw) as Decision[]) : []
-    } catch {
-      return []
-    }
-  })
-
-  useEffect(() => {
-    localStorage.setItem(LS_HISTORY, JSON.stringify(history))
-  }, [history])
-
-  // ===== Handlers Review =====
-  const pushDecision = (d: Dataset, status: DecisionStatus) => {
-    const cl = getChecks(d.id)
-    const decision: Decision = {
-      id: uid('md'),
-      datasetId: d.id,
-      datasetName: d.name,
-      provider: d.provider,
-      category: d.category,
-      packages: Object.entries(d.packages)
-        .filter(([, v]) => !!v)
-        .map(([k]) => k),
-      status,
-      notes: notesById[d.id] || undefined,
-      checklist: cl,
-      moderator: 'admin',
-      decidedAt: new Date().toISOString(),
-    }
-    setHistory((prev) => [decision, ...prev])
-  }
-
-  const handleApprove = (id: string) => {
-    setDatasets((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, status: 'approved' } : d))
-    )
-    const d = datasets.find((x) => x.id === id)
-    if (d) pushDecision(d, 'approved')
-    alert(`Dataset ${id} đã được phê duyệt và xuất hiện trong Catalog!`)
-  }
-
-  const handleReject = (id: string) => {
-    if (confirm('Bạn có chắc muốn từ chối dataset này?')) {
-      // giữ lại dataset nhưng gắn cờ rejected để có thể xem ở Lịch sử & khôi phục
-      setDatasets((prev) =>
-        prev.map((d) => (d.id === id ? { ...d, status: 'rejected' } : d))
-      )
-      const d = datasets.find((x) => x.id === id)
-      if (d) pushDecision(d, 'rejected')
-      alert(`Dataset ${id} đã bị từ chối.`)
+      setLoading(true)
+      const data = await moderationApi.getPending()
+      setDatasets(data)
+    } catch (error) {
+      console.error('Failed to load pending datasets:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  // ===== HISTORY filters / actions =====
-  const [q, setQ] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | DecisionStatus>('all')
-
-  const filteredHistory = useMemo(() => {
-    const kw = q.trim().toLowerCase()
-    return history.filter(
-      (h) =>
-        (statusFilter === 'all' ? true : h.status === statusFilter) &&
-        (kw === '' ||
-          h.datasetName.toLowerCase().includes(kw) ||
-          h.provider.toLowerCase().includes(kw) ||
-          h.category.toLowerCase().includes(kw))
-    )
-  }, [history, q, statusFilter])
-
-  const exportHistoryCSV = () => {
-    const header = [
-      'DatasetId',
-      'DatasetName',
-      'Provider',
-      'Category',
-      'Packages',
-      'Status',
-      'Moderator',
-      'DecidedAt',
-      'Notes',
-      'Check.SampleOK',
-      'Check.DescOK',
-      'Check.Verified',
-      'Check.NoDuplicate',
-      'Restored',
-    ]
-    const rows = [header.join(',')]
-    filteredHistory.forEach((d) => {
-      rows.push(
-        [
-          d.datasetId,
-          d.datasetName.includes(',') ? `"${d.datasetName}"` : d.datasetName,
-          d.provider.includes(',') ? `"${d.provider}"` : d.provider,
-          d.category,
-          d.packages.join('|'),
-          d.status,
-          d.moderator,
-          d.decidedAt,
-          d.notes ? (d.notes.includes(',') ? `"${d.notes}"` : d.notes) : '',
-          String(d.checklist.sampleQuality),
-          String(d.checklist.descriptionClear),
-          String(d.checklist.providerVerified),
-          String(d.checklist.noDuplicate),
-          String(!!d.restored),
-        ].join(',')
-      )
-    })
-    download(
-      `moderation-history-${new Date().toISOString().slice(0, 10)}.csv`,
-      rows.join('\n')
-    )
+  const handleViewDetail = async (datasetId: number) => {
+    try {
+      const detail = await moderationApi.getById(datasetId)
+      setSelectedDataset(detail)
+      setDetailModal(true)
+    } catch (error: any) {
+      toast.error('Lỗi load detail: ' + error.message)
+    }
   }
 
-  const restoreToPending = (rec: Decision) => {
-    // chuyển dataset thành pending, đánh dấu record lịch sử là restored
-    setDatasets((prev) =>
-      prev.map((d) =>
-        d.id === rec.datasetId ? { ...d, status: 'pending' } : d
-      )
-    )
-    setHistory((prev) =>
-      prev.map((h) => (h.id === rec.id ? { ...h, restored: true } : h))
-    )
-    alert('Đã khôi phục dataset về hàng chờ.')
+  const handleReview = (actionType: 'approve' | 'reject') => {
+    if (!selectedDataset) return
+    setAction(actionType)
+    setReviewModal(true)
+    setComments('')
   }
 
-  // ===== UI =====
+  const handleSubmitReview = async () => {
+    if (!selectedDataset) return
+
+    if (action === 'reject' && !comments.trim()) {
+      toast.error('Vui lòng nhập lý do từ chối!')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      if (action === 'approve') {
+        await moderationApi.approve(selectedDataset.datasetId, comments || undefined)
+        toast.success('Dataset đã được phê duyệt!')
+      } else {
+        await moderationApi.reject(selectedDataset.datasetId, comments)
+        toast.success('Dataset đã bị từ chối. Provider sẽ nhận được thông báo.')
+      }
+      
+      await loadPendingDatasets()
+      setReviewModal(false)
+      setDetailModal(false)
+      setSelectedDataset(null)
+      setComments('')
+    } catch (error: any) {
+      toast.error('Lỗi: ' + (error.response?.data?.message || error.message))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handlePreview = async (datasetId: number, page: number = 1) => {
+    setLoadingPreview(true)
+    setCurrentPage(page)
+    try {
+      const data = await moderationApi.preview(datasetId, page, 50)
+      setPreviewData(data)
+      setPreviewModal(true)
+    } catch (error: any) {
+      toast.error('Lỗi preview: ' + (error.response?.data?.message || error.message))
+    } finally{
+      setLoadingPreview(false)
+    }
+  }
+
+  const handleDownloadForReview = async (datasetId: number, datasetName: string) => {
+    setDownloading(datasetId)
+    try {
+      const blob = await moderationApi.downloadForReview(datasetId)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${datasetName.replace(/\s+/g, '_')}_review.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+      toast.success('Downloaded CSV successfully!')
+    } catch (error: any) {
+      toast.error('Lỗi download: ' + (error.response?.data?.message || error.message))
+    } finally {
+      setDownloading(null)
+    }
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('vi-VN')
+  }
+
   return (
-    <DashboardLayout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-4xl font-bold">Kiểm duyệt Dataset</h1>
-          <div className="flex rounded-xl border overflow-hidden">
-            <button
-              className={`px-4 py-2 ${
-                activeTab === 'review' ? 'bg-blue-600 text-white' : 'bg-white'
-              }`}
-              onClick={() => setActiveTab('review')}
-            >
-              Review
-            </button>
-            <button
-              className={`px-4 py-2 ${
-                activeTab === 'history' ? 'bg-blue-600 text-white' : 'bg-white'
-              }`}
-              onClick={() => setActiveTab('history')}
-            >
-              Lịch sử duyệt
-            </button>
+    <ModeratorLayout>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+            Kiểm Duyệt Datasets
+          </h1>
+          <p className="text-gray-600 mt-1">Phê duyệt datasets từ Data Providers để đăng tải lên nền tảng</p>
+        </div>
+
+        {/* Stats */}
+        <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm text-blue-100 mb-1">Datasets chờ kiểm duyệt</div>
+              <div className="text-4xl font-bold">{datasets.length}</div>
+            </div>
+            <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
           </div>
         </div>
 
-        {/* ================= Review Tab ================= */}
-        {activeTab === 'review' && (
-          <>
-            {pendingDatasets.length === 0 && (
-              <div className="card text-center py-12">
-                <div className="text-6xl mb-4">✅</div>
-                <h2 className="text-2xl font-bold mb-2">
-                  Không có dataset cần kiểm duyệt
-                </h2>
-                <p className="text-gray-600">Tất cả submissions đã được xử lý</p>
-              </div>
-            )}
-
-            <div className="space-y-6">
-              {pendingDatasets.map((dataset) => {
-                const c = getChecks(dataset.id)
-                return (
-                  <div key={dataset.id} className="card">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <h2 className="text-2xl font-bold mb-2">
-                          {dataset.name}
-                        </h2>
-                        <p className="text-gray-600">
-                          Nhà cung cấp:{' '}
-                          <span className="font-semibold">
-                            {dataset.provider}
-                          </span>
-                        </p>
+        {/* Datasets List */}
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <p className="text-gray-600 mt-4">Đang tải datasets...</p>
+          </div>
+        ) : datasets.length > 0 ? (
+          <div className="space-y-4">
+            {datasets.map((dataset) => (
+              <div key={dataset.datasetId} className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-shadow">
+                <div className="p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="text-xl font-bold text-gray-900">{dataset.name}</h3>
+                        <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+                          {dataset.category || 'N/A'}
+                        </span>
                       </div>
-                      <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-semibold">
-                        Chờ duyệt
-                      </span>
-                    </div>
-
-                    <div className="grid md:grid-cols-2 gap-6 mb-6">
-                      <div>
-                        <h3 className="font-semibold mb-2">Thông tin cơ bản</h3>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Danh mục:</span>
-                            <span className="font-medium">
-                              {dataset.category}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Khu vực:</span>
-                            <span className="font-medium">
-                              {dataset.regions.join(', ')}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">
-                              Tổng records:
-                            </span>
-                            <span className="font-medium">
-                              {fmtInt(dataset.sampleData.totalRecords)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Cập nhật:</span>
-                            <span className="font-medium">
-                              {dataset.sampleData.updateFrequency}
-                            </span>
-                          </div>
+                      <p className="text-gray-600 text-sm mb-3">{dataset.description}</p>
+                      
+                      <div className="flex flex-wrap gap-4 text-sm">
+                        <div className="flex items-center gap-1 text-gray-500">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          <span>{dataset.providerName || 'Unknown'}</span>
                         </div>
-                      </div>
-
-                      <div>
-                        <h3 className="font-semibold mb-2">Gói hỗ trợ</h3>
-                        <div className="flex flex-wrap gap-2">
-                          {dataset.packages.file && (
-                            <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                              📁 File
-                            </span>
-                          )}
-                          {dataset.packages.api && (
-                            <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                              🔌 API
-                            </span>
-                          )}
-                          {dataset.packages.subscription && (
-                            <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                              🌍 Subscription
-                            </span>
-                          )}
+                        <div className="flex items-center gap-1 text-gray-500">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                          </svg>
+                          <span>{(dataset.rowCount || 0).toLocaleString()} records</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-gray-500">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>{formatDate(dataset.uploadDate)}</span>
                         </div>
                       </div>
                     </div>
+                  </div>
 
-                    <div className="mb-6">
-                      <h3 className="font-semibold mb-2">Mô tả</h3>
-                      <p className="text-gray-700">{dataset.description}</p>
-                    </div>
-
-                    <div className="mb-6">
-                      <h3 className="font-semibold mb-2">Tags</h3>
-                      <div className="flex flex-wrap gap-2">
-                        {dataset.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="bg-gray-50 p-4 rounded-lg mb-4">
-                      <h3 className="font-semibold mb-2">✅ Checklist kiểm duyệt</h3>
-                      <div className="space-y-1 text-sm">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            className="rounded"
-                            checked={c.sampleQuality}
-                            onChange={(e) =>
-                              setChecks((prev) => ({
-                                ...prev,
-                                [dataset.id]: {
-                                  ...getChecks(dataset.id),
-                                  sampleQuality: e.target.checked,
-                                },
-                              }))
-                            }
-                          />
-                          Dữ liệu mẫu đầy đủ, chất lượng tốt
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            className="rounded"
-                            checked={c.descriptionClear}
-                            onChange={(e) =>
-                              setChecks((prev) => ({
-                                ...prev,
-                                [dataset.id]: {
-                                  ...getChecks(dataset.id),
-                                  descriptionClear: e.target.checked,
-                                },
-                              }))
-                            }
-                          />
-                          Mô tả rõ ràng, không vi phạm chính sách
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            className="rounded"
-                            checked={c.providerVerified}
-                            onChange={(e) =>
-                              setChecks((prev) => ({
-                                ...prev,
-                                [dataset.id]: {
-                                  ...getChecks(dataset.id),
-                                  providerVerified: e.target.checked,
-                                },
-                              }))
-                            }
-                          />
-                          Nhà cung cấp uy tín, đã verify
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            className="rounded"
-                            checked={c.noDuplicate}
-                            onChange={(e) =>
-                              setChecks((prev) => ({
-                                ...prev,
-                                [dataset.id]: {
-                                  ...getChecks(dataset.id),
-                                  noDuplicate: e.target.checked,
-                                },
-                              }))
-                            }
-                          />
-                          Không trùng lặp với dataset hiện có
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="mb-6">
-                      <label className="block text-sm text-gray-600 mb-1">
-                        Ghi chú (nếu có)
-                      </label>
-                      <textarea
-                        className="input w-full h-24"
-                        placeholder="Lý do từ chối / lưu ý khi phê duyệt..."
-                        value={notesById[dataset.id] || ''}
-                        onChange={(e) =>
-                          setNotesById((prev) => ({
-                            ...prev,
-                            [dataset.id]: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-
-                    <div className="flex gap-4">
+                  {/* Actions */}
+                  <div className="pt-4 border-t border-gray-100 space-y-3">
+                    <div className="flex gap-3">
                       <button
-                        onClick={() => handleApprove(dataset.id)}
-                        className="btn-primary flex-1"
+                        onClick={() => handleViewDetail(dataset.datasetId)}
+                        className="flex-1 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg font-semibold hover:bg-indigo-100 transition-all inline-flex items-center justify-center border border-indigo-200"
                       >
-                        ✅ Phê duyệt
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Chi tiết
                       </button>
                       <button
-                        onClick={() => handleReject(dataset.id)}
-                        className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex-1"
+                        onClick={() => handlePreview(dataset.datasetId)}
+                        disabled={loadingPreview}
+                        className="flex-1 bg-blue-50 text-blue-600 px-4 py-2 rounded-lg font-semibold hover:bg-blue-100 transition-all inline-flex items-center justify-center border border-blue-200 disabled:opacity-50"
                       >
-                        ❌ Từ chối
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        Preview
+                      </button>
+                      <button
+                        onClick={() => handleDownloadForReview(dataset.datasetId, dataset.name)}
+                        disabled={downloading === dataset.datasetId}
+                        className="flex-1 bg-purple-50 text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-purple-100 transition-all inline-flex items-center justify-center border border-purple-200 disabled:opacity-50"
+                      >
+                        {downloading === dataset.datasetId ? (
+                          <span className="flex items-center gap-2">
+                            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            Downloading...
+                          </span>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            Download
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
-                )
-              })}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-lg p-12 text-center border border-gray-100">
+            <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-12 h-12 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
             </div>
-          </>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Tất cả đã kiểm duyệt!</h3>
+            <p className="text-gray-600">Không có dataset nào đang chờ kiểm duyệt</p>
+          </div>
         )}
+      </div>
 
-        {/* ================= History Tab ================= */}
-        {activeTab === 'history' && (
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold">Lịch sử duyệt</h2>
-              <div className="flex items-center gap-2">
-                <input
-                  className="input"
-                  placeholder="Tìm (dataset / provider / category)..."
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                />
-                <select
-                  className="input"
-                  value={statusFilter}
-                  onChange={(e) =>
-                    setStatusFilter(e.target.value as 'all' | DecisionStatus)
-                  }
+      {/* Detail Modal */}
+      {detailModal && selectedDataset && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 p-6 z-10">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold">Chi tiết Dataset</h2>
+                <button
+                  onClick={() => setDetailModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
                 >
-                  <option value="all">Tất cả</option>
-                  <option value="approved">Đã duyệt</option>
-                  <option value="rejected">Đã từ chối</option>
-                </select>
-                <button className="btn-secondary" onClick={exportHistoryCSV}>
-                  📥 Xuất CSV
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4">Dataset</th>
-                    <th className="text-left py-3 px-4">Provider</th>
-                    <th className="text-left py-3 px-4">Category</th>
-                    <th className="text-left py-3 px-4">Packages</th>
-                    <th className="text-left py-3 px-4">Moderator</th>
-                    <th className="text-left py-3 px-4">Thời gian</th>
-                    <th className="text-center py-3 px-4">Trạng thái</th>
-                    <th className="text-right py-3 px-4 w-[220px]">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredHistory.map((d) => {
-                    const badge =
-                      d.status === 'approved'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-red-100 text-red-700'
-                    return (
-                      <tr
-                        key={d.id}
-                        className="border-b border-gray-100 hover:bg-gray-50"
-                      >
-                        <td className="py-3 px-4">
-                          <div className="font-medium">{d.datasetName}</div>
-                          <div className="text-xs text-gray-500">
-                            {d.datasetId}
-                          </div>
-                          {d.notes && (
-                            <div className="text-xs text-gray-500 mt-1">
-                              Note: {d.notes}
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">{d.provider}</td>
-                        <td className="py-3 px-4">{d.category}</td>
-                        <td className="py-3 px-4">
-                          <div className="flex flex-wrap gap-1">
-                            {d.packages.map((p) => (
-                              <span
-                                key={p}
-                                className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs capitalize"
-                              >
-                                {p}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">{d.moderator}</td>
-                        <td className="py-3 px-4 text-sm text-gray-600">
-                          {fmtDate(d.decidedAt)}
-                          {d.restored && (
-                            <span className="ml-2 px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 text-xs">
-                              restored
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <span className={`px-3 py-1 rounded-full text-sm ${badge}`}>
-                            {d.status === 'approved' ? 'Đã duyệt' : 'Đã từ chối'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex justify-end gap-2 whitespace-nowrap">
-                            <button
-                              className="btn-primary"
-                              onClick={() => restoreToPending(d)}
-                            >
-                              ↩ Khôi phục
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                  {filteredHistory.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={8}
-                        className="py-8 text-center text-gray-500"
-                      >
-                        Chưa có bản ghi phù hợp.
-                      </td>
-                    </tr>
+            <div className="p-6 space-y-4">
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+                <h3 className="font-bold text-lg mb-3">{selectedDataset.name}</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-gray-600">Dataset ID:</span>
+                    <span className="ml-2 font-medium">#{selectedDataset.datasetId}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Category:</span>
+                    <span className="ml-2 font-medium">{selectedDataset.category || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Records:</span>
+                    <span className="ml-2 font-medium">{(selectedDataset.rowCount || 0).toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Upload Date:</span>
+                    <span className="ml-2 font-medium">{formatDate(selectedDataset.uploadDate)}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Status:</span>
+                    <span className="ml-2 font-medium">{selectedDataset.status}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Moderation:</span>
+                    <span className="ml-2 font-medium">{selectedDataset.moderationStatus}</span>
+                  </div>
+                </div>
+                {selectedDataset.description && (
+                  <div className="mt-3 pt-3 border-t border-blue-200">
+                    <div className="text-gray-600 text-sm">Description:</div>
+                    <div className="text-gray-900 mt-1">{selectedDataset.description}</div>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4">
+                <h4 className="font-semibold mb-2">Provider Information</h4>
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <span className="text-gray-600">Company:</span>
+                    <span className="ml-2 font-medium">{selectedDataset.provider.companyName}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Email:</span>
+                    <span className="ml-2 font-medium">{selectedDataset.provider.contactEmail}</span>
+                  </div>
+                  {selectedDataset.provider.contactPhone && (
+                    <div>
+                      <span className="text-gray-600">Phone:</span>
+                      <span className="ml-2 font-medium">{selectedDataset.provider.contactPhone}</span>
+                    </div>
                   )}
-                </tbody>
-              </table>
+                </div>
+              </div>
+
+              {selectedDataset.moderationHistory && selectedDataset.moderationHistory.length > 0 && (
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <h4 className="font-semibold mb-2">Moderation History</h4>
+                  <div className="space-y-2">
+                    {selectedDataset.moderationHistory.map((history) => (
+                      <div key={history.moderationId} className="bg-white p-3 rounded-lg text-sm">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium">{history.status}</span>
+                          <span className="text-gray-500 text-xs">{formatDate(history.reviewDate)}</span>
+                        </div>
+                        {history.moderatorName && (
+                          <div className="text-gray-600 text-xs">By: {history.moderatorName}</div>
+                        )}
+                        {history.comments && (
+                          <div className="text-gray-700 mt-1">{history.comments}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => handleReview('approve')}
+                  className="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all inline-flex items-center justify-center"
+                >
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Phê duyệt
+                </button>
+                <button
+                  onClick={() => handleReview('reject')}
+                  className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all inline-flex items-center justify-center"
+                >
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Từ chối
+                </button>
+              </div>
             </div>
           </div>
-        )}
-      </div>
-    </DashboardLayout>
+        </div>
+      )}
+
+      {/* Review Modal */}
+      {reviewModal && selectedDataset && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold">
+                  {action === 'approve' ? '✅ Phê duyệt Dataset' : '❌ Từ chối Dataset'}
+                </h2>
+                <button
+                  onClick={() => setReviewModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-gray-50 rounded-xl p-4">
+                <h3 className="font-semibold mb-2">Dataset: {selectedDataset.name}</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-gray-600">Provider:</span>
+                    <span className="ml-2 font-medium">{selectedDataset.provider.companyName}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Records:</span>
+                    <span className="ml-2 font-medium">{(selectedDataset.rowCount || 0).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  {action === 'approve' ? 'Ghi chú (tùy chọn)' : 'Lý do từ chối *'}
+                </label>
+                <textarea
+                  value={comments}
+                  onChange={(e) => setComments(e.target.value)}
+                  required={action === 'reject'}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+                  rows={4}
+                  placeholder={action === 'approve' 
+                    ? 'Thêm ghi chú về dataset (tùy chọn)...' 
+                    : 'Nhập lý do từ chối để provider có thể chỉnh sửa...'}
+                />
+              </div>
+
+              {action === 'approve' && (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-800">
+                  <p className="font-semibold mb-1">✅ Phê duyệt dataset này?</p>
+                  <p>Dataset sẽ được đăng tải lên nền tảng và consumers có thể mua ngay.</p>
+                </div>
+              )}
+
+              {action === 'reject' && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800">
+                  <p className="font-semibold mb-1">❌ Từ chối dataset này?</p>
+                  <p>Provider sẽ nhận được thông báo và có thể chỉnh sửa dataset.</p>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setReviewModal(false)}
+                  className="flex-1 bg-gray-100 text-gray-700 px-6 py-3 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
+                  disabled={submitting}
+                >
+                  Hủy
+                </button>
+                <button
+                  onClick={handleSubmitReview}
+                  disabled={submitting}
+                  className={`flex-1 px-6 py-3 rounded-xl font-semibold transition-all disabled:opacity-50 ${
+                    action === 'approve'
+                      ? 'bg-gradient-to-r from-green-500 to-green-600 text-white hover:shadow-lg'
+                      : 'bg-gradient-to-r from-red-500 to-red-600 text-white hover:shadow-lg'
+                  }`}
+                >
+                  {submitting ? 'Đang xử lý...' : action === 'approve' ? 'Xác nhận phê duyệt' : 'Xác nhận từ chối'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal */}
+      {previewModal && previewData && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    👁️ Preview Dataset
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">{previewData.datasetName}</p>
+                </div>
+                <button
+                  onClick={() => setPreviewModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto p-6">
+              <div className="grid grid-cols-4 gap-4 mb-4 text-sm">
+                <div className="bg-blue-50 rounded-lg p-3">
+                  <div className="text-blue-600 font-semibold">Total Records</div>
+                  <div className="text-2xl font-bold text-blue-900">{(previewData.totalRecords || 0).toLocaleString()}</div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-3">
+                  <div className="text-green-600 font-semibold">Current Page</div>
+                  <div className="text-2xl font-bold text-green-900">{previewData.currentPage || 1}</div>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-3">
+                  <div className="text-purple-600 font-semibold">Page Size</div>
+                  <div className="text-2xl font-bold text-purple-900">{previewData.pageSize || 50}</div>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-3">
+                  <div className="text-orange-600 font-semibold">Total Pages</div>
+                  <div className="text-2xl font-bold text-orange-900">{previewData.totalPages || 1}</div>
+                </div>
+              </div>
+
+              {previewData.records && previewData.records.length > 0 ? (
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-200 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Station ID</th>
+                        <th className="px-3 py-2 text-left">Station Name</th>
+                        <th className="px-3 py-2 text-left">Province</th>
+                        <th className="px-3 py-2 text-left">District</th>
+                        <th className="px-3 py-2 text-right">Energy (kWh)</th>
+                        <th className="px-3 py-2 text-right">Voltage (V)</th>
+                        <th className="px-3 py-2 text-right">Power (kW)</th>
+                        <th className="px-3 py-2 text-left">Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewData.records.map((record, idx) => (
+                        <tr key={idx} className="border-b border-gray-200 hover:bg-gray-100">
+                          <td className="px-3 py-2 font-mono text-xs">{record.stationId || 'N/A'}</td>
+                          <td className="px-3 py-2">{record.stationName || 'N/A'}</td>
+                          <td className="px-3 py-2">{record.provinceName || 'N/A'}</td>
+                          <td className="px-3 py-2">{record.districtName || 'N/A'}</td>
+                          <td className="px-3 py-2 text-right">{(record.energyKwh || 0).toFixed(2)}</td>
+                          <td className="px-3 py-2 text-right">{(record.voltage || 0).toFixed(1)}</td>
+                          <td className="px-3 py-2 text-right">{(record.powerKw || 0).toFixed(2)}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{record.chargingTimestamp ? new Date(record.chargingTimestamp).toLocaleString() : 'N/A'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-600">
+                  No records found
+                </div>
+              )}
+
+              {/* Pagination */}
+              {previewData.totalPages > 1 && (
+                <div className="flex justify-center gap-2 mt-4">
+                  <button
+                    onClick={() => handlePreview(previewData.datasetId, currentPage - 1)}
+                    disabled={currentPage === 1 || loadingPreview}
+                    className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-200 transition-colors"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-4 py-2 bg-gray-100 rounded-lg">
+                    Page {currentPage} of {previewData.totalPages}
+                  </span>
+                  <button
+                    onClick={() => handlePreview(previewData.datasetId, currentPage + 1)}
+                    disabled={currentPage === previewData.totalPages || loadingPreview}
+                    className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-200 transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={() => setPreviewModal(false)}
+                className="flex-1 bg-gray-100 text-gray-700 px-6 py-3 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </ModeratorLayout>
   )
 }

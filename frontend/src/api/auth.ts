@@ -1,34 +1,78 @@
-import { saveSession, type Session, type Role } from '../auth/session';
+import client from './client'
+import { LoginRequest, RegisterRequest, AuthResponse } from '../types'
 
-function makeSession(email: string, role: Role): Session {
-  return {
-    token: `demo-token-${role}`,
-    email,
-    role,
-    // nhớ lưu hạn – ví dụ 7 ngày
-    expiresAt: Date.now() + 1000 * 60 * 60 * 24 * 7,
-  };
+export interface UserProfile {
+  user: {
+    userId: number
+    fullName: string
+    email: string
+    role: string
+    status: string
+    createdAt: string
+  }
+  provider?: {
+    providerId: number
+    companyName: string
+    companyWebsite?: string
+    contactEmail?: string
+    contactPhone?: string
+    address?: string
+    provinceId?: number
+    provinceName?: string
+  }
+  consumer?: {
+    consumerId: number
+    organizationName?: string
+    contactPerson?: string
+    contactNumber?: string
+    billingEmail?: string
+  }
 }
 
-export async function login(email: string, password: string): Promise<Session> {
-  // demo theo đúng UI của bạn
-  const ok =
-    (email === 'admin@evdata.vn' && password === 'admin123') ||
-    (email === 'provider@evdata.vn' && password === 'provider123') ||
-    (email === 'consumer@evdata.vn' && password === 'consumer123');
+export const authApi = {
+  /**
+   * POST /api/auth/login
+   * Login user and get JWT token
+   */
+  login: async (data: LoginRequest): Promise<AuthResponse> => {
+    const response = await client.post<AuthResponse>('/auth/login', data)
+    return response.data
+  },
 
-  if (!ok) throw new Error('Email hoặc mật khẩu không đúng');
+  /**
+   * POST /api/auth/register
+   * Register new user (DataProvider or DataConsumer)
+   */
+  register: async (data: RegisterRequest): Promise<AuthResponse> => {
+    const response = await client.post<AuthResponse>('/auth/register', data)
+    return response.data
+  },
 
-  const role: Role =
-    email.startsWith('admin') ? 'admin' :
-    email.startsWith('provider') ? 'provider' : 'consumer';
-
-  const s = makeSession(email, role);
-  saveSession(s);
-  return s;
+  /**
+   * GET /api/auth/profile
+   * Get current authenticated user's profile with provider/consumer details
+   */
+  getProfile: async (): Promise<UserProfile> => {
+    const response = await client.get<UserProfile>('/auth/profile')
+    return response.data
+  },
 }
 
-export function logout() {
-  // tuỳ bạn gọi ở menu user
-  localStorage.removeItem('ev.auth.session');
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

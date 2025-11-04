@@ -1,82 +1,121 @@
-import React, { createContext, useContext, useMemo, useState, useEffect } from 'react'
-import { isAccountBlocked } from '../api/admin'   // 👈 THÊM: kiểm tra email bị khóa
-
-export type Role = 'admin' | 'provider' | 'consumer' | null
-
-interface User {
-  id: string
-  email: string
-  role: Role
-  name: string
-}
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { authApi } from '../api'
+import { User, LoginRequest, RegisterRequest } from '../types'
 
 interface AuthContextType {
   user: User | null
-  login: (email: string, password: string, role: Role) => void
+  loading: boolean
+  login: (email: string, password: string) => Promise<void>
+  register: (data: RegisterRequest) => Promise<void>
   logout: () => void
-  switchRole: (role: Role) => void
+  isAuthenticated: boolean
+  isAdmin: boolean
+  isProvider: boolean
+  isConsumer: boolean
 }
 
-const SESSION_KEY = 'ev.auth.user'
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Khởi tạo state từ localStorage ngay lập tức để tránh nháy redirect sau F5
-  const [user, setUser] = useState<User | null>(() => {
-    try {
-      const raw = localStorage.getItem(SESSION_KEY)
-      return raw ? (JSON.parse(raw) as User) : null
-    } catch {
-      return null
-    }
-  })
+interface AuthProviderProps {
+  children: ReactNode
+}
 
-  // Đồng bộ đa tab
+export function AuthProvider({ children }: AuthProviderProps) {
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  // Load user from localStorage on mount
   useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === SESSION_KEY) {
-        try {
-          setUser(e.newValue ? (JSON.parse(e.newValue) as User) : null)
-        } catch {
-          setUser(null)
+    const storedUser = localStorage.getItem('user')
+    if (storedUser) {
+      try {
+        const userData = JSON.parse(storedUser)
+        // Check if token is expired
+        const expiresAt = new Date(userData.expiresAt)
+        if (expiresAt > new Date()) {
+          setUser(userData)
+        } else {
+          // Token expired, clear storage
+          localStorage.removeItem('user')
         }
+      } catch (error) {
+        console.error('Failed to parse user data:', error)
+        localStorage.removeItem('user')
       }
     }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
+    setLoading(false)
   }, [])
 
-  const login = (email: string, _password: string, role: Role) => {
-    // ❗️Chặn đăng nhập nếu bị block
-    if (isAccountBlocked(email)) {
-      throw new Error('Tài khoản đã bị khóa bởi Admin')
-    }
+  const login = async (email: string, password: string) => {
+    try {
+      const response = await authApi.login({ email, password })
+      
+      const userData: User = {
+        userId: response.userId,
+        fullName: response.fullName,
+        email: response.email,
+        role: response.role,
+        token: response.token,
+        expiresAt: response.expiresAt,
+      }
 
-    const newUser: User = {
-      id: `user_${Date.now()}`,
-      email,
-      role: role!,
-      name: email.split('@')[0],
+      setUser(userData)
+      localStorage.setItem('user', JSON.stringify(userData))
+
+      // Navigation will be handled by Login component
+    } catch (error: any) {
+      console.error('Login error:', error)
+      throw error
     }
-    setUser(newUser)
-    localStorage.setItem(SESSION_KEY, JSON.stringify(newUser))
+  }
+
+  const register = async (data: RegisterRequest) => {
+    try {
+      const response = await authApi.register(data)
+      
+      const userData: User = {
+        userId: response.userId,
+        fullName: response.fullName,
+        email: response.email,
+        role: response.role,
+        token: response.token,
+        expiresAt: response.expiresAt,
+      }
+
+      setUser(userData)
+      localStorage.setItem('user', JSON.stringify(userData))
+
+      // Navigation will be handled by Register component
+    } catch (error: any) {
+      console.error('Register error:', error)
+      throw error
+    }
   }
 
   const logout = () => {
     setUser(null)
-    localStorage.removeItem(SESSION_KEY)
+    localStorage.removeItem('user')
+    // Navigation to /login will be handled by component calling logout
   }
 
-  const switchRole = (role: Role) => {
-    setUser(prev => {
-      if (!prev) return prev
-      const updated = { ...prev, role: role! }
-      localStorage.setItem(SESSION_KEY, JSON.stringify(updated))
-      return updated
-    })
-  }
+  // Helper computed values
+  const isAuthenticated = !!user
+  const isAdmin = user?.role === 'Admin' || user?.role === 'Moderator'
+  const isProvider = user?.role === 'DataProvider'
+  const isConsumer = user?.role === 'DataConsumer'
 
-  const value = useMemo(() => ({ user, login, logout, switchRole }), [user])
+  const value: AuthContextType = {
+    user,
+    loading,
+    login,
+    register,
+    logout,
+    isAuthenticated,
+    isAdmin,
+    isProvider,
+    isConsumer,
+  }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

@@ -1,0 +1,6 @@
+@EVDataMarketplace.API_HostAddress = http://localhost:5258
+
+GET {{EVDataMarketplace.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

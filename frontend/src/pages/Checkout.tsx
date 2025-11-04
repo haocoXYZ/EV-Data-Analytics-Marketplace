@@ -1,333 +1,197 @@
-import React, { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import ConsumerLayout from '../components/ConsumerLayout'
-import { getPricing } from '../api/admin'
-
-type Pkg = 'file' | 'api' | 'subscription'
+import { purchasesApi, paymentsApi } from '../api'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function Checkout() {
+  const location = useLocation()
   const navigate = useNavigate()
-  const [orderData, setOrderData] = useState<any>(null)
-  const [email, setEmail] = useState('')
-  const [company, setCompany] = useState('')
-  const [purpose, setPurpose] = useState('')
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [webhookStatus, setWebhookStatus] = useState<'idle' | 'processing' | 'verifying'>('idle')
+  const { purchaseType, referenceId, datasetName, price } = location.state || {}
 
-  // Currency formatter
-  const fmt = useMemo(() => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }), [])
+  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
-    const pending = localStorage.getItem('pendingOrder')
-    if (pending) {
-      setOrderData(JSON.parse(pending))
-    } else {
+    if (!referenceId) {
       navigate('/catalog')
     }
-  }, [navigate])
+  }, [referenceId, navigate])
 
-  // Helpers lấy dữ liệu đơn hàng (tương thích ngược)
-  const pkg: Pkg | undefined = (orderData?.pkg || orderData?.package) as Pkg | undefined
-  const params = orderData?.params || {}
-  const days: number = Number(params.days || 0)
-  const requests: number = Number(params.requests || 0)
-  const months: number = Number(params.months || 1)
-  const regions: string[] = (params.regions || []) as string[]
-
-  // Lấy pricing: ưu tiên snapshot lưu từ DatasetDetail; nếu không có thì dùng giá Admin hiện tại
-  const basePricing = getPricing()
-  const pricing = orderData?.pricingSnapshot || basePricing
-  const filePerDayUSD = (pricing.oneTime as any)?.perDayUSD ?? 2
-
-  // Tính tổng tiền theo pricing nói trên (khớp DatasetDetail)
-  const computedTotal = useMemo(() => {
-    if (!pkg) return 0
-    if (pkg === 'file') {
-      return Number(pricing.oneTime.priceUSD) + Number(days || 0) * Number(filePerDayUSD)
+  const getPackageIcon = () => {
+    switch (purchaseType) {
+      case 'onetime':
+        return '📁'
+      case 'api':
+        return '⚡'
+      case 'subscription':
+        return '🔄'
+      default:
+        return '📦'
     }
-    if (pkg === 'api') {
-      return Number(requests || 0) * Number(pricing.api.pricePerRequest)
-    }
-    // subscription
-    const opt = pricing.monthly.options.find((o: any) => o.months === Number(months))
-      || pricing.monthly.options[0]
-    const regionsCount = regions.length || 0
-    return regionsCount * Number(opt.pricePerRegionPerMonthUSD) * Number(months || opt.months)
-  }, [pkg, pricing, filePerDayUSD, days, requests, months, regions])
-
-  // Tổng hiển thị/thu tiền: ưu tiên totalUSD (mới) -> price (cũ) -> computed
-  const displayTotal = Number(
-    (orderData?.totalUSD ?? orderData?.price ?? computedTotal).toFixed(2)
-  )
-
-  // Simulate webhook callback from payment gateway
-  const simulatePaymentWebhook = async (orderId: string, amount: number) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const webhookPayload = {
-          event: 'payment.success',
-          orderId,
-          amount,
-          timestamp: new Date().toISOString(),
-          transactionId: 'TXN-' + Math.random().toString(36).substring(7),
-          status: 'completed',
-          method: 'credit_card'
-        }
-        console.log('Webhook received:', webhookPayload)
-        resolve(webhookPayload)
-      }, 800)
-    })
   }
 
-  // Simulate webhook verification
-  const verifyWebhookSignature = async (_orderId: string) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const isValid = Math.random() > 0.05 // 95% success rate for demo
-        console.log('Webhook signature verified:', isValid)
-        resolve(isValid)
-      }, 500)
-    })
+  const getPackageName = () => {
+    switch (purchaseType) {
+      case 'onetime':
+        return 'Gói File - Tải xuống một lần'
+      case 'api':
+        return 'Gói API - Truy cập qua API'
+      case 'subscription':
+        return 'Gói Thuê bao - Theo dõi khu vực'
+      default:
+        return 'Gói mua'
+    }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!orderData || !pkg) return
-
-    setIsProcessing(true)
-    setWebhookStatus('processing')
-
+  const handlePayment = async () => {
+    setCreating(true)
     try {
-      // Step 1: Process payment
-      await new Promise(resolve => setTimeout(resolve, 1200))
-      const orderId = 'ORD-' + Date.now()
+      const paymentType = purchaseType === 'onetime' ? 'DataPackage' : 
+                          purchaseType === 'api' ? 'APIPackage' : 
+                          'SubscriptionPackage'
 
-      // Step 2: Simulate webhook callback from payment gateway
-      setWebhookStatus('verifying')
-      await simulatePaymentWebhook(orderId, displayTotal)
+      const paymentResponse = await paymentsApi.create({
+        paymentType,
+        referenceId
+      })
 
-      // Step 3: Verify webhook signature
-      const isValid = await verifyWebhookSignature(orderId)
-      if (!isValid) {
-        throw new Error('Webhook verification failed')
+      // Redirect to PayOS checkout
+      if (paymentResponse.checkoutUrl) {
+        window.location.href = paymentResponse.checkoutUrl
+      } else {
+        toast.error('Không thể tạo payment link')
+        setCreating(false)
       }
-
-      // Step 4: Create confirmed order
-      const order = {
-        ...orderData,
-        // Chuẩn hoá field để lưu trữ
-        pkg,
-        params: { days, requests, months, regions },
-        pricingSnapshot: pricing,
-        totalUSD: displayTotal,
-        email,
-        company,
-        purpose,
-        orderId,
-        status: 'paid',
-        timestamp: new Date().toISOString(),
-        webhookVerified: true,
-        transactionId: 'TXN-' + Math.random().toString(36).substring(7)
-      }
-
-      localStorage.setItem('completedOrder', JSON.stringify(order))
-      localStorage.removeItem('pendingOrder')
-
-      setIsProcessing(false)
-      setWebhookStatus('idle')
-      navigate('/success')
-    } catch (error) {
-      console.error('Payment error:', error)
-      setIsProcessing(false)
-      setWebhookStatus('idle')
-      alert('Payment processing failed. Please try again.')
+    } catch (error: any) {
+      toast.error('Lỗi: ' + error.message)
+      setCreating(false)
     }
   }
 
-  if (!orderData || !pkg) {
-    return (
-      <ConsumerLayout>
-        <div className="max-w-7xl mx-auto px-4 py-12">Loading...</div>
-      </ConsumerLayout>
-    )
+  if (!referenceId) {
+    return null
   }
-
-  const pkgLabel =
-    pkg === 'file' ? 'Data File'
-    : pkg === 'api' ? 'API Access'
-    : 'Regional Subscription'
 
   return (
     <ConsumerLayout>
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-3xl font-bold mb-8">Thanh toán</h1>
+      <div className="bg-gray-50 min-h-screen py-12">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="text-6xl mb-4">{getPackageIcon()}</div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">B6: Thanh toán</h1>
+            <p className="text-gray-600">Hoàn tất đơn hàng và thanh toán qua PayOS</p>
+          </div>
 
-        <div className="grid md:grid-cols-2 gap-8">
           {/* Order Summary */}
-          <div className="card">
-            <h2 className="text-xl font-bold mb-4">Tóm tắt đơn hàng</h2>
-
-            <div className="space-y-3 mb-6">
-              <div>
-                <div className="text-sm text-gray-600">Dữ liệu</div>
-                <div className="font-semibold">{orderData.datasetName}</div>
-              </div>
-
-              <div>
-                <div className="text-sm text-gray-600">Gói dịch vụ</div>
-                <div className="font-semibold">{pkgLabel}</div>
-              </div>
-
-              {pkg === 'file' && (
-                <div>
-                  <div className="text-sm text-gray-600">Số ngày</div>
-                  <div className="font-semibold">{days} ngày</div>
-                </div>
-              )}
-
-              {pkg === 'api' && (
-                <div>
-                  <div className="text-sm text-gray-600">Số lượt request</div>
-                  <div className="font-semibold">{requests.toLocaleString()} requests</div>
-                </div>
-              )}
-
-              {pkg === 'subscription' && (
-                <>
-                  <div>
-                    <div className="text-sm text-gray-600">Khu vực</div>
-                    <div className="font-semibold">{regions.join(', ') || '—'}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600">Số tháng</div>
-                    <div className="font-semibold">{months}</div>
-                  </div>
-                </>
-              )}
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-6">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
+              <h2 className="text-xl font-bold mb-1">Thông tin đơn hàng</h2>
+              <p className="text-blue-100 text-sm">Kiểm tra thông tin trước khi thanh toán</p>
             </div>
 
-            {/* Nếu không có snapshot thì đang dùng giá Admin hiện tại */}
-            {!orderData.pricingSnapshot && (
-              <div className="mb-4 rounded bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800">
-                Giá được áp theo cấu hình hiện tại của Admin.
+            <div className="p-6 space-y-4">
+              <div className="flex items-start justify-between pb-4 border-b border-gray-100">
+                <div className="flex-1">
+                  <div className="text-sm text-gray-600 mb-1">Dataset</div>
+                  <div className="font-bold text-gray-900 text-lg">{datasetName}</div>
+                </div>
               </div>
-            )}
 
-            <div className="border-t border-gray-200 pt-4">
-              <div className="flex justify-between items-center">
-                <span className="text-lg font-semibold">Tổng cộng</span>
-                <span className="text-2xl font-bold text-blue-600">
-                  {fmt.format(displayTotal)}
-                </span>
+              <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                <div>
+                  <div className="text-sm text-gray-600 mb-1">Gói mua</div>
+                  <div className="font-semibold text-gray-900">{getPackageName()}</div>
+                </div>
+                <div className="text-sm">
+                  <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">
+                    {purchaseType?.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                <div className="text-gray-700">Tổng tiền</div>
+                <div className="text-2xl font-bold text-blue-600">
+                  {price?.toLocaleString('vi-VN')} đ
+                </div>
+              </div>
+
+              {/* Revenue Split Info */}
+              <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-600 mb-3">PHÂN CHIA DOANH THU</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-white rounded-lg p-3">
+                    <div className="text-xs text-gray-600 mb-1">Provider nhận</div>
+                    <div className="font-bold text-green-600">70%</div>
+                    <div className="text-xs text-gray-500">{((price || 0) * 0.7).toLocaleString('vi-VN')} đ</div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3">
+                    <div className="text-xs text-gray-600 mb-1">Nền tảng</div>
+                    <div className="font-bold text-blue-600">30%</div>
+                    <div className="text-xs text-gray-500">{((price || 0) * 0.3).toLocaleString('vi-VN')} đ</div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Payment Form */}
-          <div className="card">
-            <h2 className="text-xl font-bold mb-4">Thông tin thanh toán</h2>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="your@email.com"
-                  disabled={isProcessing}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Công ty / Tổ chức *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={company}
-                  onChange={(e) => setCompany(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Tên công ty"
-                  disabled={isProcessing}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Mục đích sử dụng *
-                </label>
-                <textarea
-                  required
-                  value={purpose}
-                  onChange={(e) => setPurpose(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Phân tích, nghiên cứu, phát triển sản phẩm..."
-                  rows={3}
-                  disabled={isProcessing}
-                />
-              </div>
-
-              {isProcessing && (
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <div className="text-sm text-blue-800">
-                    <div className="font-semibold mb-2">Trạng thái xử lý:</div>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
-                          <span className="text-white text-xs">✓</span>
-                        </div>
-                        <span>Xử lý thanh toán...</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                            webhookStatus === 'verifying' ? 'bg-blue-500' : 'bg-gray-300'
-                          }`}
-                        >
-                          {webhookStatus === 'verifying' && (
-                            <svg className="animate-spin h-3 w-3 text-white" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                            </svg>
-                          )}
-                        </div>
-                        <span>Xác minh webhook...</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+          {/* Payment Button */}
+          <div className="space-y-4">
+            <button
+              onClick={handlePayment}
+              disabled={creating}
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-4 rounded-xl font-bold text-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {creating ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-6 w-6" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Đang tạo payment link...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  Thanh toán qua PayOS
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </span>
               )}
+            </button>
 
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <div className="text-sm text-blue-800">
-                  <span className="font-semibold">Demo Mode:</span> Thanh toán được giả lập. Hệ thống sẽ nhận webhook callback từ payment gateway (demo).
-                </div>
-              </div>
+            <button
+              onClick={() => navigate(-1)}
+              className="w-full bg-gray-100 text-gray-700 px-8 py-3 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
+            >
+              ← Quay lại
+            </button>
+          </div>
 
-              <button
-                type="submit"
-                disabled={isProcessing}
-                className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isProcessing ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Đang xử lý...
-                  </span>
-                ) : (
-                  'Xác nhận thanh toán'
-                )}
-              </button>
-            </form>
+          {/* Payment Info */}
+          <div className="mt-8 bg-blue-50 rounded-xl p-6 border border-blue-200">
+            <h3 className="font-bold text-blue-900 mb-3 flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              Thanh toán an toàn với PayOS
+            </h3>
+            <ul className="space-y-2 text-sm text-blue-800">
+              <li className="flex items-start gap-2">
+                <span>✓</span>
+                <span>Hỗ trợ QR Code, chuyển khoản ngân hàng, ví điện tử</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span>✓</span>
+                <span>Bảo mật SSL 256-bit, PCI DSS compliant</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span>✓</span>
+                <span>Xác nhận tức thì, tự động cập nhật purchase</span>
+              </li>
+            </ul>
           </div>
         </div>
       </div>
