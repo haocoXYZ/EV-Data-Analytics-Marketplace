@@ -1,0 +1,3 @@
+﻿<Project>
+  <Import Project="..\build\EVDataMarketplace.API.props" />
+</Project>
