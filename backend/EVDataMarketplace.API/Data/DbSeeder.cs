@@ -7,8 +7,8 @@ public static class DbSeeder
 {
     public static void SeedData(EVDataMarketplaceDbContext context)
     {
-        // Database is already migrated in Program.cs
-        // No need to call EnsureCreated() when using migrations
+        // Ensure database is created
+        context.Database.EnsureCreated();
 
         // Seed Provinces
         if (!context.Provinces.Any())

@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import toast from 'react-hot-toast'
 import AdminLayout from '../components/AdminLayout'
 import { pricingApi } from '../api'
 import { SystemPricing } from '../types'
@@ -41,7 +40,7 @@ export default function AdminPricing() {
       setFormData(initialFormData)
     } catch (error) {
       console.error('Failed to load pricing:', error)
-      toast.error('Lỗi tải pricing configurations')
+      alert('Lỗi tải pricing configurations')
     } finally {
       setLoading(false)
     }
@@ -74,18 +73,18 @@ export default function AdminPricing() {
 
     const total = data.providerCommissionPercent + data.adminCommissionPercent
     if (Math.abs(total - 100) > 0.01) {
-      toast.error(`Tổng commission phải bằng 100%! Hiện tại: Provider ${data.providerCommissionPercent}% + Admin ${data.adminCommissionPercent}% = ${total}%`)
+      alert(`❌ Tổng commission phải bằng 100%!\nHiện tại: Provider ${data.providerCommissionPercent}% + Admin ${data.adminCommissionPercent}% = ${total}%`)
       return
     }
 
     try {
       setSaving(id)
       await pricingApi.update(id, data)
-      toast.success('Cập nhật pricing thành công!')
+      alert('✅ Cập nhật pricing thành công!')
       await loadPricing()
       setEditingId(null)
     } catch (error: any) {
-      toast.error('Lỗi: ' + (error.response?.data?.message || error.message))
+      alert('❌ Lỗi: ' + (error.response?.data?.message || error.message))
     } finally {
       setSaving(null)
     }
@@ -95,9 +94,8 @@ export default function AdminPricing() {
     try {
       await pricingApi.toggleActive(id)
       await loadPricing()
-      toast.success('Cập nhật trạng thái thành công!')
     } catch (error: any) {
-      toast.error('Lỗi toggle active: ' + (error.response?.data?.message || error.message))
+      alert('❌ Lỗi toggle active: ' + (error.response?.data?.message || error.message))
     }
   }
 

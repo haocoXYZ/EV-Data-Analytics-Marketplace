@@ -38,10 +38,6 @@ builder.Services.AddCors(options =>
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey is not configured");
 
-// Debug logging
-Console.WriteLine($"[Program.cs] JWT SecretKey length: {secretKey.Length} chars");
-Console.WriteLine($"[Program.cs] JWT SecretKey first 50 chars: {secretKey.Substring(0, Math.Min(50, secretKey.Length))}");
-
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;

@@ -1,6 +1,5 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import toast from 'react-hot-toast'
 import ProviderLayout from '../components/ProviderLayout'
 import { datasetsApi } from '../api'
 
@@ -36,7 +35,7 @@ export default function ProviderNew() {
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
     } catch (error: any) {
-      toast.error('Lỗi download template: ' + error.message)
+      alert('❌ Lỗi download template: ' + error.message)
     } finally {
       setDownloadingTemplate(false)
     }
@@ -46,7 +45,7 @@ export default function ProviderNew() {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0]
       if (!selectedFile.name.toLowerCase().endsWith('.csv')) {
-        toast.error('Vui lòng chọn file CSV!')
+        alert('Vui lòng chọn file CSV!')
         return
       }
       setFile(selectedFile)
@@ -57,17 +56,17 @@ export default function ProviderNew() {
     e.preventDefault()
     
     if (!file) {
-      toast.error('Vui lòng chọn file CSV!')
+      alert('Vui lòng chọn file CSV!')
       return
     }
 
     if (!formData.name.trim()) {
-      toast.error('Vui lòng nhập tên dataset!')
+      alert('Vui lòng nhập tên dataset!')
       return
     }
 
     if (!formData.category) {
-      toast.error('Vui lòng chọn danh mục!')
+      alert('Vui lòng chọn danh mục!')
       return
     }
 
@@ -82,16 +81,18 @@ export default function ProviderNew() {
 
       const result = await datasetsApi.upload(uploadData)
       
-      toast.success(`Dataset "${result.name}" đã được upload thành công! (${result.rowCount} records). Đang chờ moderator review.`, {
-        duration: 5000
-      })
+      alert(`✅ Dataset "${result.name}" đã được upload thành công!\n\n` +
+            `ID: ${result.datasetId}\n` +
+            `Records: ${result.rowCount}\n` +
+            `Status: Đang chờ kiểm duyệt\n\n` +
+            `Bạn sẽ được chuyển về dashboard sau 2 giây...`)
       
       setTimeout(() => {
         navigate('/provider/dashboard')
       }, 2000)
     } catch (error: any) {
       const errorMsg = error.response?.data?.message || error.message
-      toast.error('Lỗi upload: ' + errorMsg)
+      alert('❌ Lỗi upload: ' + errorMsg)
     } finally {
       setUploading(false)
     }

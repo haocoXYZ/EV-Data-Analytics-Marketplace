@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import toast from 'react-hot-toast'
 import AdminLayout from '../components/AdminLayout'
 import { payoutsApi } from '../api'
 import { RevenueSummary, Payout } from '../types'
@@ -26,7 +25,7 @@ export default function AdminPayouts() {
       setPayouts(allPayouts)
     } catch (error) {
       console.error('Failed to load payout data:', error)
-      toast.error('Lỗi tải dữ liệu payouts: ' + (error as Error).message)
+      alert('Lỗi tải dữ liệu payouts: ' + (error as Error).message)
     } finally {
       setLoading(false)
     }
@@ -38,10 +37,10 @@ export default function AdminPayouts() {
     try {
       setGeneratingPayouts(true)
       const result = await payoutsApi.generatePayouts(selectedMonth)
-      toast.success(`${result.message}! Tổng tiền: ${result.totalAmount.toLocaleString('vi-VN')} đ`)
+      alert(`✅ ${result.message}\nTổng tiền: ${result.totalAmount.toLocaleString('vi-VN')} đ`)
       await loadData()
     } catch (error: any) {
-      toast.error('Lỗi tạo payouts: ' + error.message)
+      alert('Lỗi tạo payouts: ' + error.message)
     } finally {
       setGeneratingPayouts(false)
     }
@@ -59,10 +58,10 @@ export default function AdminPayouts() {
         bankAccount,
         notes: `Paid on ${new Date().toLocaleDateString('vi-VN')}`
       })
-      toast.success('Đã đánh dấu payout hoàn thành!')
+      alert('✅ Đã đánh dấu payout hoàn thành!')
       await loadData()
     } catch (error: any) {
-      toast.error('Lỗi: ' + error.message)
+      alert('Lỗi: ' + error.message)
     }
   }
 

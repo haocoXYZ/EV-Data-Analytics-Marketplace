@@ -7,9 +7,21 @@ export const subscriptionsApi = {
    * Get dashboard data for subscription
    */
   getDashboard: async (subscriptionId: number): Promise<SubscriptionDashboardData> => {
-    const response = await client.get<SubscriptionDashboardData>(
-      `/subscription-packages/${subscriptionId}/dashboard`
-    )
+    const response = await client.get<{
+      subscriptionId: number
+      provinceName: string
+      districtName?: string
+      dateRange: {
+        startDate: string
+        endDate: string
+      }
+      totalStations: number
+      totalEnergyKwh: number
+      averageChargingDuration: number
+      totalChargingSessions: number
+    }>(`/subscription-packages/${subscriptionId}/dashboard`)
+    
+    // Backend response already matches frontend format
     return response.data
   },
 
@@ -22,6 +34,8 @@ export const subscriptionsApi = {
       `/subscription-packages/${subscriptionId}/charts/energy-over-time`,
       { params: { days } }
     )
+    
+    // Backend response already in {label, value} format
     return response.data
   },
 
@@ -33,6 +47,8 @@ export const subscriptionsApi = {
     const response = await client.get<ChartDataPoint[]>(
       `/subscription-packages/${subscriptionId}/charts/station-distribution`
     )
+    
+    // Backend response already in {label, value} format
     return response.data
   },
 
@@ -44,6 +60,8 @@ export const subscriptionsApi = {
     const response = await client.get<ChartDataPoint[]>(
       `/subscription-packages/${subscriptionId}/charts/peak-hours`
     )
+    
+    // Backend response already in {label, value} format
     return response.data
   },
 }

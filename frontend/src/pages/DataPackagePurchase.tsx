@@ -1,90 +1,79 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import toast from 'react-hot-toast'
-import { purchasesApi, paymentsApi, locationsApi } from '../api'
-import { DataPackagePreview, Province, District } from '../types'
+import { purchasesApi, paymentsApi } from '../api'
+import { DataPackagePreview } from '../types'
+
+// Hardcoded provinces and districts per TESTING_GUIDE
+const PROVINCES = [
+  { id: 1, name: 'Hà Nội' },
+  { id: 2, name: 'TP. Hồ Chí Minh' },
+  { id: 3, name: 'Đà Nẵng' },
+]
+
+const DISTRICTS: Record<number, { id: number; name: string }[]> = {
+  1: [ // Hanoi - 30 districts (showing first 10)
+    { id: 1, name: 'Ba Đình' },
+    { id: 2, name: 'Hoàn Kiếm' },
+    { id: 3, name: 'Tây Hồ' },
+    { id: 4, name: 'Long Biên' },
+    { id: 5, name: 'Cầu Giấy' },
+    { id: 6, name: 'Đống Đa' },
+    { id: 7, name: 'Hai Bà Trưng' },
+    { id: 8, name: 'Hoàng Mai' },
+    { id: 9, name: 'Thanh Xuân' },
+    { id: 10, name: 'Sóc Sơn' },
+  ],
+  2: [ // HCMC - 24 districts (showing first 10)
+    { id: 31, name: 'Quận 1' },
+    { id: 32, name: 'Quận 2' },
+    { id: 33, name: 'Quận 3' },
+    { id: 34, name: 'Quận 4' },
+    { id: 35, name: 'Quận 5' },
+    { id: 36, name: 'Quận 6' },
+    { id: 37, name: 'Quận 7' },
+    { id: 38, name: 'Quận 8' },
+    { id: 39, name: 'Quận 9' },
+    { id: 40, name: 'Quận 10' },
+  ],
+  3: [ // Danang - 8 districts
+    { id: 55, name: 'Hải Châu' },
+    { id: 56, name: 'Thanh Khê' },
+    { id: 57, name: 'Sơn Trà' },
+    { id: 58, name: 'Ngũ Hành Sơn' },
+    { id: 59, name: 'Liên Chiểu' },
+    { id: 60, name: 'Cẩm Lệ' },
+    { id: 61, name: 'Hòa Vang' },
+    { id: 62, name: 'Hoàng Sa' },
+  ],
+}
 
 export default function DataPackagePurchase() {
   const navigate = useNavigate()
-  const [provinces, setProvinces] = useState<Province[]>([])
-  const [districts, setDistricts] = useState<District[]>([])
-  const [provinceId, setProvinceId] = useState<number | null>(null)
+  const [provinceId, setProvinceId] = useState<number>(1)
   const [districtId, setDistrictId] = useState<number | undefined>()
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   
   const [preview, setPreview] = useState<DataPackagePreview | null>(null)
   const [loading, setLoading] = useState(false)
-  const [loadingLocations, setLoadingLocations] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [purchasing, setPurchasing] = useState(false)
 
-  // Load provinces on mount
-  useEffect(() => {
-    loadProvinces()
-  }, [])
-
-  // Load districts when province changes
-  useEffect(() => {
-    if (provinceId) {
-      loadDistricts(provinceId)
-    } else {
-      setDistricts([])
-      setDistrictId(undefined)
-    }
-  }, [provinceId])
-
-  const loadProvinces = async () => {
-    try {
-      setLoadingLocations(true)
-      const data = await locationsApi.getProvinces()
-      setProvinces(data)
-      // Set first province as default
-      if (data.length > 0) {
-        setProvinceId(data[0].provinceId)
-      }
-    } catch (err: any) {
-      console.error('Failed to load provinces:', err)
-      setError('Failed to load provinces. Please refresh the page.')
-    } finally {
-      setLoadingLocations(false)
-    }
-  }
-
-  const loadDistricts = async (provId: number) => {
-    try {
-      const data = await locationsApi.getDistrictsByProvince(provId)
-      setDistricts(data)
-    } catch (err: any) {
-      console.error('Failed to load districts:', err)
-      setDistricts([])
-    }
-  }
-
   const handlePreview = async () => {
-    if (!provinceId) {
-      toast.error('Please select a province')
-      setError('Please select a province')
-      return
-    }
-
     setLoading(true)
     setError(null)
     
     try {
       const previewData = await purchasesApi.previewDataPackage({
-        provinceId: provinceId!,
+        provinceId,
         districtId,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
       })
       setPreview(previewData)
-      toast.success(`Found ${previewData.totalRecords} records!`)
     } catch (err: any) {
       console.error('Preview error:', err)
-      const errorMsg = err.response?.data?.message || 'Failed to preview data'
-      setError(errorMsg)
-      toast.error(errorMsg)
+      setError(err.response?.data?.message || 'Failed to preview data')
     } finally {
       setLoading(false)
     }
@@ -96,18 +85,14 @@ export default function DataPackagePurchase() {
     setPurchasing(true)
     setError(null)
 
-    const toastId = toast.loading('Creating purchase...')
-
     try {
       // Step 1: Create purchase
       const purchaseResult = await purchasesApi.createDataPackage({
-        provinceId: provinceId!,
+        provinceId,
         districtId,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
       })
-
-      toast.loading('Creating payment...', { id: toastId })
 
       // Step 2: Create payment
       const paymentResult = await paymentsApi.create({
@@ -115,35 +100,21 @@ export default function DataPackagePurchase() {
         referenceId: purchaseResult.purchaseId,
       })
 
-      toast.success('Redirecting to payment...', { id: toastId })
-
       // Step 3: Redirect to PayOS checkout
       if (paymentResult.checkoutUrl) {
-        setTimeout(() => {
-          window.location.href = paymentResult.checkoutUrl
-        }, 500)
+        window.location.href = paymentResult.checkoutUrl
       } else {
         throw new Error('No checkout URL received')
       }
     } catch (err: any) {
       console.error('Purchase error:', err)
-      const errorMsg = err.response?.data?.message || 'Failed to create purchase'
-      setError(errorMsg)
-      toast.error(errorMsg, { id: toastId })
+      setError(err.response?.data?.message || 'Failed to create purchase')
       setPurchasing(false)
     }
   }
 
-  if (loadingLocations) {
-    return (
-      <div className="min-h-screen bg-gray-50 py-8 px-4 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading locations...</p>
-        </div>
-      </div>
-    )
-  }
+  const selectedProvince = PROVINCES.find(p => p.id === provinceId)
+  const availableDistricts = DISTRICTS[provinceId] || []
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -160,20 +131,16 @@ export default function DataPackagePurchase() {
                 Province <span className="text-red-500">*</span>
               </label>
               <select
-                value={provinceId || ''}
+                value={provinceId}
                 onChange={(e) => {
                   setProvinceId(Number(e.target.value))
                   setDistrictId(undefined)
                   setPreview(null)
                 }}
                 className="w-full border border-gray-300 rounded-md px-3 py-2"
-                disabled={provinces.length === 0}
               >
-                <option value="">Select province...</option>
-                {provinces.map(province => (
-                  <option key={province.provinceId} value={province.provinceId}>
-                    {province.name}
-                  </option>
+                {PROVINCES.map(province => (
+                  <option key={province.id} value={province.id}>{province.name}</option>
                 ))}
               </select>
             </div>
@@ -189,18 +156,12 @@ export default function DataPackagePurchase() {
                   setPreview(null)
                 }}
                 className="w-full border border-gray-300 rounded-md px-3 py-2"
-                disabled={!provinceId || districts.length === 0}
               >
                 <option value="">All districts</option>
-                {districts.map(district => (
-                  <option key={district.districtId} value={district.districtId}>
-                    {district.name}
-                  </option>
+                {availableDistricts.map(district => (
+                  <option key={district.id} value={district.id}>{district.name}</option>
                 ))}
               </select>
-              {provinceId && districts.length === 0 && (
-                <p className="text-xs text-gray-500 mt-1">No districts available for this province</p>
-              )}
             </div>
           </div>
 

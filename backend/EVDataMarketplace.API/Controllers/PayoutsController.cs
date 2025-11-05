@@ -243,6 +243,7 @@ public class PayoutsController : ControllerBase
                 p.PayoutDate,
                 p.PayoutStatus,
                 p.PaymentMethod,
+                p.BankAccount,
                 p.TransactionRef
             })
             .ToListAsync();

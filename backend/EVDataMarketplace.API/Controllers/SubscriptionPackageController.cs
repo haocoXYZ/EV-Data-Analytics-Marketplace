@@ -200,28 +200,25 @@ public class SubscriptionPackageController : ControllerBase
         // Calculate statistics
         var totalRecords = allRecords.Count;
         var totalEnergy = allRecords.Sum(r => r.EnergyKwh);
-        var avgEnergy = totalRecords > 0 ? allRecords.Average(r => r.EnergyKwh) : 0;
+        var avgDuration = totalRecords > 0 && allRecords.Any(r => r.DurationMinutes.HasValue)
+            ? allRecords.Where(r => r.DurationMinutes.HasValue).Average(r => r.DurationMinutes!.Value)
+            : 0;
         var uniqueStations = allRecords.Select(r => r.StationId).Distinct().Count();
 
         return Ok(new
         {
-            subscription = new
+            subscriptionId = subscription.SubscriptionId,
+            provinceName = subscription.Province?.Name ?? "Unknown",
+            districtName = subscription.District?.Name,
+            dateRange = new
             {
-                subscriptionId = subscription.SubscriptionId,
-                provinceName = subscription.Province?.Name ?? "Unknown",
-                districtName = subscription.District?.Name,
                 startDate = subscription.StartDate,
-                endDate = subscription.EndDate,
-                daysRemaining = (subscription.EndDate - DateTime.Now).Days
+                endDate = subscription.EndDate
             },
-            statistics = new
-            {
-                totalRecords,
-                totalEnergyKwh = Math.Round(totalEnergy, 2),
-                averageEnergyKwh = Math.Round(avgEnergy, 2),
-                uniqueStations,
-                dataRangeDays = 30
-            }
+            totalStations = uniqueStations,
+            totalEnergyKwh = Math.Round(totalEnergy, 2),
+            averageChargingDuration = Math.Round(avgDuration, 1),
+            totalChargingSessions = totalRecords
         });
     }
 
@@ -255,15 +252,18 @@ public class SubscriptionPackageController : ControllerBase
             .OrderBy(g => g.date)
             .ToListAsync();
 
-        return Ok(new
+        // Convert to frontend format {label, value}
+        var chartData = data.Select(d => new
         {
-            chartType = "Energy Over Time",
-            dataPoints = data
-        });
+            label = d.date.ToString("MMM dd"),
+            value = Math.Round(d.totalEnergy, 2)
+        }).ToList();
+
+        return Ok(chartData);
     }
 
     /// <summary>
-    /// Get station distribution chart data
+    /// Get station distribution chart data (by district)
     /// </summary>
     [HttpGet("{subscriptionId}/charts/station-distribution")]
     public async Task<IActionResult> GetStationDistributionChart(int subscriptionId)
@@ -278,27 +278,25 @@ public class SubscriptionPackageController : ControllerBase
 
         var data = await _context.DatasetRecords
             .Include(r => r.Dataset)
+            .Include(r => r.District)
             .Where(r => r.ProvinceId == subscription.ProvinceId)
             .Where(r => r.Dataset!.ModerationStatus == "Approved")
             .Where(r => r.ChargingTimestamp >= thirtyDaysAgo)
             .Where(r => !subscription.DistrictId.HasValue || r.DistrictId == subscription.DistrictId.Value)
-            .GroupBy(r => new { r.StationId, r.StationName })
-            .Select(g => new
-            {
-                stationId = g.Key.StationId,
-                stationName = g.Key.StationName,
-                totalEnergy = g.Sum(r => r.EnergyKwh),
-                recordCount = g.Count()
-            })
-            .OrderByDescending(g => g.totalEnergy)
-            .Take(10)
             .ToListAsync();
 
-        return Ok(new
-        {
-            chartType = "Top 10 Stations by Energy",
-            dataPoints = data
-        });
+        // Group by district and count unique stations
+        var districtData = data
+            .GroupBy(r => new { r.DistrictId, DistrictName = r.District != null ? r.District.Name : "Unknown" })
+            .Select(g => new
+            {
+                label = g.Key.DistrictName,
+                value = g.Select(r => r.StationId).Distinct().Count()
+            })
+            .OrderByDescending(d => d.value)
+            .ToList();
+
+        return Ok(districtData);
     }
 
     /// <summary>
@@ -328,18 +326,24 @@ public class SubscriptionPackageController : ControllerBase
             .Select(g => new
             {
                 hour = g.Key,
-                totalEnergy = g.Sum(r => r.EnergyKwh),
-                recordCount = g.Count(),
-                avgEnergy = g.Average(r => r.EnergyKwh)
+                sessions = g.Count()
             })
             .OrderBy(g => g.hour)
             .ToList();
 
-        return Ok(new
-        {
-            chartType = "Peak Hours Analysis",
-            dataPoints = hourlyData
-        });
+        // Convert to frontend format {label, value} - ensure all 24 hours are present
+        var chartData = Enumerable.Range(0, 24)
+            .Select(hour => {
+                var hourData = hourlyData.FirstOrDefault(h => h.hour == hour);
+                return new
+                {
+                    label = $"{hour:D2}:00",
+                    value = hourData?.sessions ?? 0
+                };
+            })
+            .ToList();
+
+        return Ok(chartData);
     }
 
     /// <summary>

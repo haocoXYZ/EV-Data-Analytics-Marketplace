@@ -16,10 +16,6 @@ import ModeratorReview from './pages/ModeratorReview'
 import AdminPayouts from './pages/AdminPayouts'
 import AdminDashboard from './pages/AdminDashboard'
 import ProviderDashboard from './pages/ProviderDashboard'
-import ProviderEarnings from './pages/ProviderEarnings'
-import ProviderDatasets from './pages/ProviderDatasets'
-import SubscriptionPurchase from './pages/SubscriptionPurchase'
-import APIPackagePurchase from './pages/APIPackagePurchase'
 import Login from './pages/Login'
 
 const routes: RouteObject[] = [
@@ -28,8 +24,6 @@ const routes: RouteObject[] = [
     { path: '/catalog', element: <Catalog /> },
     { path: '/dataset/:id', element: <DatasetDetail /> },
     { path: '/buy-data', element: <DataPackagePurchase /> },
-    { path: '/subscribe', element: <SubscriptionPurchase /> },
-    { path: '/buy-api', element: <APIPackagePurchase /> },
     { path: '/checkout', element: <Checkout /> },
     { path: '/success', element: <Success /> },
     { path: '/payment-success', element: <PaymentSuccess /> },
@@ -40,11 +34,11 @@ const routes: RouteObject[] = [
     { path: '/admin/dashboard', element: <AdminDashboard /> },
     { path: '/admin/pricing', element: <AdminPricing /> },
     { path: '/admin/payouts', element: <AdminPayouts /> },
-    { path: '/moderation/review', element: <ModeratorReview /> },
+    { path: '/moderator/review', element: <ModeratorReview /> },
     { path: '/provider/dashboard', element: <ProviderDashboard /> },
     { path: '/provider/new', element: <ProviderNew /> },
-    { path: '/provider/datasets', element: <ProviderDatasets /> },
-    { path: '/provider/earnings', element: <ProviderEarnings /> },
+    { path: '/provider/datasets', element: <div className="p-8"><h1 className="text-2xl font-bold">My Datasets</h1></div> },
+    { path: '/provider/earnings', element: <div className="p-8"><h1 className="text-2xl font-bold">Earnings</h1></div> },
 ]
 
 export default routes

@@ -19,10 +19,9 @@ export default function ProviderLayout({ children }: ProviderLayoutProps) {
 
   const menuItems = [
     { path: '/provider/dashboard', label: 'Dashboard', icon: '📊' },
-    { path: '/provider/datasets', label: 'My Datasets', icon: '📁' },
-    { path: '/provider/new', label: 'Upload Dataset', icon: '➕' },
-    { path: '/provider/earnings', label: 'Earnings', icon: '💰' },
-    { path: '/catalog', label: 'Browse Catalog', icon: '🔍' },
+    { path: '/provider/new', label: 'B2: Upload Dataset', icon: '➕' },
+    { path: '/catalog', label: 'Xem Datasets', icon: '📁' },
+    { path: '/provider/pricing', label: 'Xem Pricing', icon: '💰' },
   ]
 
   return (

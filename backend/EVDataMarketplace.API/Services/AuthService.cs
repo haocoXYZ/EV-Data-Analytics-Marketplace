@@ -26,11 +26,6 @@ public class AuthService : IAuthService
     {
         var jwtSettings = _configuration.GetSection("JwtSettings");
         var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey is not configured");
-        
-        // Debug logging
-        Console.WriteLine($"[AuthService] SecretKey length: {secretKey.Length} chars");
-        Console.WriteLine($"[AuthService] SecretKey first 50 chars: {secretKey.Substring(0, Math.Min(50, secretKey.Length))}");
-        
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 

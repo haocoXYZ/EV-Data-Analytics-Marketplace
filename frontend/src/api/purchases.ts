@@ -48,11 +48,11 @@ export const purchasesApi = {
   },
 
   /**
-   * GET /api/data-packages/{purchaseId}/download
+   * GET /api/purchases/download/{purchaseId}
    * Download purchased data package as CSV
    */
   downloadDataPackage: async (purchaseId: number): Promise<Blob> => {
-    const response = await client.get(`/data-packages/${purchaseId}/download`, {
+    const response = await client.get(`/purchases/download/${purchaseId}`, {
       responseType: 'blob',
     })
     return response.data
@@ -89,11 +89,11 @@ export const purchasesApi = {
   },
 
   /**
-   * GET /api/subscription-packages/my-subscriptions
+   * GET /api/purchases/my-subscriptions
    * Get consumer's subscriptions
    */
   getMySubscriptions: async (): Promise<SubscriptionPackagePurchase[]> => {
-    const response = await client.get<SubscriptionPackagePurchase[]>('/subscription-packages/my-subscriptions')
+    const response = await client.get<SubscriptionPackagePurchase[]>('/purchases/my-subscriptions')
     return response.data
   },
 
@@ -130,11 +130,11 @@ export const purchasesApi = {
   },
 
   /**
-   * GET /api/api-packages/my-packages
+   * GET /api/purchases/my-api-packages
    * Get consumer's API packages
    */
   getMyAPIPackages: async (): Promise<APIPackagePurchase[]> => {
-    const response = await client.get<APIPackagePurchase[]>('/api-packages/my-packages')
+    const response = await client.get<APIPackagePurchase[]>('/purchases/my-api-packages')
     return response.data
   },
 

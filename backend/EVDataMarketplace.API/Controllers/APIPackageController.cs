@@ -101,10 +101,10 @@ public class APIPackageController : ControllerBase
         return Ok(new
         {
             message = "API package created successfully. Please proceed to payment.",
-            apiPurchaseId = apiPackage.ApiPurchaseId,
-            apiCallsPurchased = dto.ApiCallsPurchased,
+            purchaseId = apiPackage.ApiPurchaseId,
+            totalAPICalls = dto.ApiCallsPurchased,
             pricePerCall = pricing.ApiPricePerCall.Value,
-            totalPaid,
+            totalPrice = totalPaid,
             status = apiPackage.Status,
             paymentInfo = new
             {
@@ -171,9 +171,10 @@ public class APIPackageController : ControllerBase
         {
             message = "API key generated successfully",
             keyId = apiKey.KeyId,
-            keyValue = apiKey.KeyValue,
+            apiKey = apiKey.KeyValue,
             keyName = apiKey.KeyName,
             createdAt = apiKey.CreatedAt,
+            isActive = apiKey.IsActive,
             warning = "Please save this API key. It cannot be retrieved again."
         });
     }
@@ -206,7 +207,7 @@ public class APIPackageController : ControllerBase
             .Select(k => new
             {
                 keyId = k.KeyId,
-                keyValue = k.KeyValue,
+                apiKey = k.KeyValue,
                 keyName = k.KeyName,
                 isActive = k.IsActive,
                 createdAt = k.CreatedAt,

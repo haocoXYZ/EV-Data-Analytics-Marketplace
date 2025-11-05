@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import toast from 'react-hot-toast'
 import ConsumerLayout from '../components/ConsumerLayout'
 import { purchasesApi, paymentsApi } from '../api'
 import { useAuth } from '../contexts/AuthContext'
@@ -47,9 +46,9 @@ export default function Checkout() {
   const handlePayment = async () => {
     setCreating(true)
     try {
-      const paymentType = purchaseType === 'onetime' ? 'DataPackage' : 
+      const paymentType = purchaseType === 'onetime' ? 'OneTimePurchase' : 
                           purchaseType === 'api' ? 'APIPackage' : 
-                          'SubscriptionPackage'
+                          'Subscription'
 
       const paymentResponse = await paymentsApi.create({
         paymentType,
@@ -60,11 +59,10 @@ export default function Checkout() {
       if (paymentResponse.checkoutUrl) {
         window.location.href = paymentResponse.checkoutUrl
       } else {
-        toast.error('Không thể tạo payment link')
-        setCreating(false)
+        alert('Lỗi: Không thể tạo payment link')
       }
     } catch (error: any) {
-      toast.error('Lỗi: ' + error.message)
+      alert('Lỗi: ' + error.message)
       setCreating(false)
     }
   }

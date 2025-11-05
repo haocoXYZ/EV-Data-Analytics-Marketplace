@@ -107,9 +107,13 @@ export interface DataPackagePurchase {
   startDate: string
   endDate: string
   rowCount: number
+  pricePerRow: number
   totalPrice: number
   status: string
   purchaseDate: string
+  downloadCount: number
+  maxDownload: number
+  lastDownloadDate?: string
 }
 
 // Subscription Package Purchase
@@ -128,16 +132,21 @@ export interface SubscriptionPackagePurchase {
   districtName?: string
   billingCycle: string
   monthlyPrice: number
+  totalPaid: number
   status: string
   startDate: string
   endDate?: string
   nextBillingDate?: string
+  purchaseDate: string
   autoRenew: boolean
+  cancelledAt?: string
+  dashboardAccessCount: number
+  lastAccessDate?: string
 }
 
 // API Package Purchase
 export interface APIPackagePurchaseRequest {
-  numberOfCalls: number
+  apiCallsPurchased: number
   provinceId?: number
   districtId?: number
 }

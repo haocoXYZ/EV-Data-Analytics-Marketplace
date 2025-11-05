@@ -5,7 +5,6 @@ using EVDataMarketplace.API.Data;
 using EVDataMarketplace.API.DTOs;
 using EVDataMarketplace.API.Models;
 using EVDataMarketplace.API.Services;
-using System.Security.Claims;
 
 namespace EVDataMarketplace.API.Controllers;
 
@@ -100,130 +99,39 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginRequestDto request)
     {
-        try
-        {
-            // Find user by email
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
-
-            if (user == null)
-            {
-                return Unauthorized(new { message = "Invalid email or password" });
-            }
-
-            // Verify password
-            if (!_authService.VerifyPassword(request.Password, user.Password))
-            {
-                return Unauthorized(new { message = "Invalid email or password" });
-            }
-
-            // Check if user is active
-            if (user.Status != "Active")
-            {
-                return Unauthorized(new { message = "Account is not active" });
-            }
-
-            // Generate JWT token
-            var token = _authService.GenerateJwtToken(user);
-            var expiryMinutes = int.Parse(HttpContext.RequestServices.GetRequiredService<IConfiguration>()
-                .GetSection("JwtSettings")["ExpiryInMinutes"] ?? "1440");
-
-            return Ok(new AuthResponseDto
-            {
-                Token = token,
-                UserId = user.UserId,
-                FullName = user.FullName,
-                Email = user.Email,
-                Role = user.Role,
-                ExpiresAt = DateTime.UtcNow.AddMinutes(expiryMinutes)
-            });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "An error occurred during login", error = ex.Message, stackTrace = ex.StackTrace });
-        }
-    }
-
-    /// <summary>
-    /// GET: api/auth/profile - Get current user's profile with provider/consumer ID
-    /// </summary>
-    [HttpGet("profile")]
-    [Authorize]
-    public async Task<ActionResult> GetProfile()
-    {
-        var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
-        if (string.IsNullOrEmpty(userEmail))
-        {
-            return Unauthorized(new { message = "User email not found in token" });
-        }
-
-        var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Email == userEmail);
+        // Find user by email
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
 
         if (user == null)
         {
-            return NotFound(new { message = "User not found" });
+            return Unauthorized(new { message = "Invalid email or password" });
         }
 
-        // Base profile info
-        var profile = new
+        // Verify password
+        if (!_authService.VerifyPassword(request.Password, user.Password))
         {
-            userId = user.UserId,
-            fullName = user.FullName,
-            email = user.Email,
-            role = user.Role,
-            status = user.Status,
-            createdAt = user.CreatedAt
-        };
-
-        // Get role-specific profile
-        if (user.Role == "DataProvider")
-        {
-            var provider = await _context.DataProviders
-                .Include(p => p.Province)
-                .FirstOrDefaultAsync(p => p.UserId == user.UserId);
-
-            if (provider != null)
-            {
-                return Ok(new
-                {
-                    user = profile,
-                    provider = new
-                    {
-                        providerId = provider.ProviderId,
-                        companyName = provider.CompanyName,
-                        companyWebsite = provider.CompanyWebsite,
-                        contactEmail = provider.ContactEmail,
-                        contactPhone = provider.ContactPhone,
-                        address = provider.Address,
-                        provinceId = provider.ProvinceId,
-                        provinceName = provider.Province?.Name
-                    }
-                });
-            }
-        }
-        else if (user.Role == "DataConsumer")
-        {
-            var consumer = await _context.DataConsumers
-                .FirstOrDefaultAsync(c => c.UserId == user.UserId);
-
-            if (consumer != null)
-            {
-                return Ok(new
-                {
-                    user = profile,
-                    consumer = new
-                    {
-                        consumerId = consumer.ConsumerId,
-                        organizationName = consumer.OrganizationName,
-                        contactPerson = consumer.ContactPerson,
-                        contactNumber = consumer.ContactNumber,
-                        billingEmail = consumer.BillingEmail
-                    }
-                });
-            }
+            return Unauthorized(new { message = "Invalid email or password" });
         }
 
-        // For Admin/Moderator or if profile not found
-        return Ok(new { user = profile });
+        // Check if user is active
+        if (user.Status != "Active")
+        {
+            return Unauthorized(new { message = "Account is not active" });
+        }
+
+        // Generate JWT token
+        var token = _authService.GenerateJwtToken(user);
+        var expiryMinutes = int.Parse(HttpContext.RequestServices.GetRequiredService<IConfiguration>()
+            .GetSection("JwtSettings")["ExpiryInMinutes"] ?? "1440");
+
+        return Ok(new AuthResponseDto
+        {
+            Token = token,
+            UserId = user.UserId,
+            FullName = user.FullName,
+            Email = user.Email,
+            Role = user.Role,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(expiryMinutes)
+        });
     }
 }

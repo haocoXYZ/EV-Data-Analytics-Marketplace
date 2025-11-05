@@ -1,6 +1,5 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import toast from 'react-hot-toast'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function Login() {
@@ -21,8 +20,6 @@ export default function Login() {
       
       // Get user from localStorage to navigate based on role
       const userData = JSON.parse(localStorage.getItem('user') || '{}')
-      toast.success(`Chào mừng trở lại, ${userData.fullName || 'User'}!`)
-      
       if (userData.role === 'Admin' || userData.role === 'Moderator') {
         navigate('/admin/dashboard')
       } else if (userData.role === 'DataProvider') {
@@ -31,9 +28,7 @@ export default function Login() {
         navigate('/')
       }
     } catch (err: any) {
-      const errorMsg = err.response?.data?.message || 'Đăng nhập thất bại. Vui lòng kiểm tra lại email và mật khẩu.'
-      setError(errorMsg)
-      toast.error(errorMsg)
+      setError(err.response?.data?.message || 'Đăng nhập thất bại. Vui lòng kiểm tra lại email và mật khẩu.')
     } finally {
       setLoading(false)
     }

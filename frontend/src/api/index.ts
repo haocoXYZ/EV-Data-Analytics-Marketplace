@@ -8,7 +8,6 @@ export * from './pricing'
 export * from './payouts'
 export * from './subscriptions'
 export * from './apiKeys'
-export * from './locations'
 
 // Re-export client for direct use if needed
 export { default as client } from './client'

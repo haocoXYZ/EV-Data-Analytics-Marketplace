@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import toast from 'react-hot-toast'
 import ModeratorLayout from '../components/ModeratorLayout'
 import { moderationApi } from '../api'
 import { Dataset, DataPreviewResponse, DatasetModerationDetail } from '../types'
@@ -41,7 +40,7 @@ export default function ModeratorReview() {
       setSelectedDataset(detail)
       setDetailModal(true)
     } catch (error: any) {
-      toast.error('Lỗi load detail: ' + error.message)
+      alert('❌ Lỗi load detail: ' + error.message)
     }
   }
 
@@ -56,7 +55,7 @@ export default function ModeratorReview() {
     if (!selectedDataset) return
 
     if (action === 'reject' && !comments.trim()) {
-      toast.error('Vui lòng nhập lý do từ chối!')
+      alert('Vui lòng nhập lý do từ chối!')
       return
     }
 
@@ -64,10 +63,10 @@ export default function ModeratorReview() {
     try {
       if (action === 'approve') {
         await moderationApi.approve(selectedDataset.datasetId, comments || undefined)
-        toast.success('Dataset đã được phê duyệt!')
+        alert('✅ Dataset đã được phê duyệt!')
       } else {
         await moderationApi.reject(selectedDataset.datasetId, comments)
-        toast.success('Dataset đã bị từ chối. Provider sẽ nhận được thông báo.')
+        alert('❌ Dataset đã bị từ chối. Provider sẽ nhận được thông báo.')
       }
       
       await loadPendingDatasets()
@@ -76,7 +75,7 @@ export default function ModeratorReview() {
       setSelectedDataset(null)
       setComments('')
     } catch (error: any) {
-      toast.error('Lỗi: ' + (error.response?.data?.message || error.message))
+      alert('❌ Lỗi: ' + (error.response?.data?.message || error.message))
     } finally {
       setSubmitting(false)
     }
@@ -90,8 +89,8 @@ export default function ModeratorReview() {
       setPreviewData(data)
       setPreviewModal(true)
     } catch (error: any) {
-      toast.error('Lỗi preview: ' + (error.response?.data?.message || error.message))
-    } finally{
+      alert('❌ Lỗi preview: ' + (error.response?.data?.message || error.message))
+    } finally {
       setLoadingPreview(false)
     }
   }
@@ -108,9 +107,8 @@ export default function ModeratorReview() {
       a.click()
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
-      toast.success('Downloaded CSV successfully!')
     } catch (error: any) {
-      toast.error('Lỗi download: ' + (error.response?.data?.message || error.message))
+      alert('❌ Lỗi download: ' + (error.response?.data?.message || error.message))
     } finally {
       setDownloading(null)
     }
