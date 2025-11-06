@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import ProviderLayout from '../components/ProviderLayout'
+import ProviderPayouts from '../components/ProviderPayouts'
 import { datasetsApi } from '../api'
 import { Dataset } from '../types'
 
@@ -8,6 +9,7 @@ export default function ProviderDashboard() {
   const [datasets, setDatasets] = useState<Dataset[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [providerId, setProviderId] = useState<number | null>(null)
   const [stats, setStats] = useState({
     total: 0,
     approved: 0,
@@ -26,6 +28,11 @@ export default function ProviderDashboard() {
       setError(null)
       const data = await datasetsApi.getMy()
       setDatasets(data)
+      
+      // Extract providerId from first dataset
+      if (data.length > 0 && data[0].providerId) {
+        setProviderId(data[0].providerId)
+      }
       
       setStats({
         total: data.length,
@@ -274,6 +281,19 @@ export default function ProviderDashboard() {
             </div>
           </div>
         </div>
+
+        {/* Provider Payouts Section */}
+        {providerId && (
+          <div>
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                💰 Thu Nhập & Thanh Toán
+              </h2>
+              <p className="text-gray-600 mt-1">Chi tiết các khoản thanh toán bạn nhận được từ nền tảng</p>
+            </div>
+            <ProviderPayouts providerId={providerId} />
+          </div>
+        )}
       </div>
     </ProviderLayout>
   )

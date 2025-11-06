@@ -44,18 +44,25 @@ public class PurchasesController : ControllerBase
             .Include(p => p.Province)
             .Include(p => p.District)
             .Where(p => p.ConsumerId == consumer.ConsumerId)
+            .OrderByDescending(p => p.PurchaseDate)
             .Select(p => new
             {
-                type = "DataPackage",
-                id = p.PurchaseId,
+                purchaseId = p.PurchaseId,
+                consumerId = p.ConsumerId,
+                provinceId = p.ProvinceId,
                 provinceName = p.Province != null ? p.Province.Name : "Unknown",
+                districtId = p.DistrictId,
                 districtName = p.District != null ? p.District.Name : "All districts",
-                details = $"{p.RowCount} rows",
+                startDate = p.StartDate,
+                endDate = p.EndDate,
+                rowCount = p.RowCount,
+                pricePerRow = p.PricePerRow,
                 totalPrice = p.TotalPrice,
-                purchaseDate = p.PurchaseDate,
                 status = p.Status,
+                purchaseDate = p.PurchaseDate,
                 downloadCount = p.DownloadCount,
-                maxDownload = p.MaxDownload
+                maxDownload = p.MaxDownload,
+                lastDownloadDate = p.LastDownloadDate
             })
             .ToListAsync();
 
@@ -64,18 +71,26 @@ public class PurchasesController : ControllerBase
             .Include(p => p.Province)
             .Include(p => p.District)
             .Where(p => p.ConsumerId == consumer.ConsumerId)
+            .OrderByDescending(p => p.PurchaseDate)
             .Select(p => new
             {
-                type = "Subscription",
-                id = p.SubscriptionId,
+                subscriptionId = p.SubscriptionId,
+                consumerId = p.ConsumerId,
+                provinceId = p.ProvinceId,
                 provinceName = p.Province != null ? p.Province.Name : "Unknown",
+                districtId = p.DistrictId,
                 districtName = p.District != null ? p.District.Name : "All districts",
-                details = $"{p.BillingCycle} - {p.StartDate:yyyy-MM-dd} to {p.EndDate:yyyy-MM-dd}",
-                totalPrice = p.TotalPaid,
-                purchaseDate = p.PurchaseDate,
+                billingCycle = p.BillingCycle,
+                monthlyPrice = p.MonthlyPrice,
+                totalPaid = p.TotalPaid,
                 status = p.Status,
+                startDate = p.StartDate,
+                endDate = p.EndDate,
+                purchaseDate = p.PurchaseDate,
+                autoRenew = p.AutoRenew,
+                cancelledAt = p.CancelledAt,
                 dashboardAccessCount = p.DashboardAccessCount,
-                autoRenew = p.AutoRenew
+                lastAccessDate = p.LastAccessDate
             })
             .ToListAsync();
 
@@ -84,17 +99,21 @@ public class PurchasesController : ControllerBase
             .Include(p => p.Province)
             .Include(p => p.District)
             .Where(p => p.ConsumerId == consumer.ConsumerId)
+            .OrderByDescending(p => p.PurchaseDate)
             .Select(p => new
             {
-                type = "APIPackage",
-                id = p.ApiPurchaseId,
-                provinceName = p.Province != null ? p.Province.Name : "Nationwide",
-                districtName = p.District != null ? p.District.Name : null,
-                details = $"{p.ApiCallsPurchased} calls ({p.ApiCallsUsed} used)",
+                purchaseId = p.ApiPurchaseId,
+                consumerId = p.ConsumerId,
+                totalAPICalls = p.ApiCallsPurchased,
+                apiCallsUsed = p.ApiCallsUsed,
+                apiCallsRemaining = p.ApiCallsPurchased - p.ApiCallsUsed,
+                pricePerCall = p.PricePerCall,
                 totalPrice = p.TotalPaid,
-                purchaseDate = p.PurchaseDate,
                 status = p.Status,
-                expiryDate = p.ExpiryDate
+                purchaseDate = p.PurchaseDate,
+                expiryDate = p.ExpiryDate,
+                provinceId = p.ProvinceId,
+                districtId = p.DistrictId
             })
             .ToListAsync();
 
@@ -102,8 +121,7 @@ public class PurchasesController : ControllerBase
         {
             dataPackages,
             subscriptions,
-            apiPackages,
-            totalPurchases = dataPackages.Count + subscriptions.Count + apiPackages.Count
+            apiPackages
         });
     }
 

@@ -363,6 +363,8 @@ public class DataPackageController : ControllerBase
                 purchaseId = p.PurchaseId,
                 provinceName = p.Province != null ? p.Province.Name : "Unknown",
                 districtName = p.District != null ? p.District.Name : "All districts",
+                startDate = p.StartDate,
+                endDate = p.EndDate,
                 rowCount = p.RowCount,
                 totalPrice = p.TotalPrice,
                 purchaseDate = p.PurchaseDate,

@@ -40,15 +40,17 @@ export default function MyPurchases() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `data_package_${purchaseId}.csv`
+      a.download = `ev_charging_data_${purchaseId}_${new Date().toISOString().split('T')[0]}.csv`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
       
-      alert('Data package downloaded successfully!')
+      alert('✅ Data package downloaded successfully!')
+      // Reload data to update download count
+      await loadData()
     } catch (error: any) {
-      alert('Download failed: ' + (error.response?.data?.message || error.message))
+      alert('❌ Download failed: ' + (error.response?.data?.message || error.message))
     } finally {
       setDownloading(null)
     }
@@ -148,6 +150,7 @@ export default function MyPurchases() {
                           <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Date Range</th>
                           <th className="text-right py-3 px-4 font-semibold text-gray-700 text-sm">Records</th>
                           <th className="text-right py-3 px-4 font-semibold text-gray-700 text-sm">Price</th>
+                          <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">Downloads</th>
                           <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">Status</th>
                           <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">Actions</th>
                         </tr>
@@ -159,10 +162,17 @@ export default function MyPurchases() {
                             <td className="py-3 px-4 text-gray-700">{item.provinceName}</td>
                             <td className="py-3 px-4 text-gray-700">{item.districtName || 'All'}</td>
                             <td className="py-3 px-4 text-sm text-gray-600">
-                              {new Date(item.startDate).toLocaleDateString()} - {new Date(item.endDate).toLocaleDateString()}
+                              {item.startDate && item.endDate
+                                ? `${new Date(item.startDate).toLocaleDateString()} - ${new Date(item.endDate).toLocaleDateString()}`
+                                : 'All time'}
                             </td>
                             <td className="py-3 px-4 text-right font-medium text-gray-900">{(item.rowCount || 0).toLocaleString()}</td>
                             <td className="py-3 px-4 text-right font-semibold text-gray-900">{(item.totalPrice || 0).toLocaleString()} đ</td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`text-sm ${item.downloadCount >= item.maxDownload ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>
+                                {item.downloadCount}/{item.maxDownload}
+                              </span>
+                            </td>
                             <td className="py-3 px-4 text-center">
                               <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusBadge(item.status)}`}>
                                 {item.status}
@@ -171,8 +181,9 @@ export default function MyPurchases() {
                             <td className="py-3 px-4 text-center">
                               <button
                                 onClick={() => handleDownload(item.purchaseId)}
-                                disabled={downloading === item.purchaseId || item.status !== 'Active'}
+                                disabled={downloading === item.purchaseId || item.status !== 'Active' || item.downloadCount >= item.maxDownload}
                                 className="text-blue-600 hover:text-blue-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                title={item.downloadCount >= item.maxDownload ? 'Download limit reached' : item.status !== 'Active' ? 'Purchase is not active' : 'Download CSV file'}
                               >
                                 {downloading === item.purchaseId ? 'Downloading...' : 'Download CSV'}
                               </button>
@@ -220,7 +231,7 @@ export default function MyPurchases() {
                           <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Billing Cycle</th>
                           <th className="text-right py-3 px-4 font-semibold text-gray-700 text-sm">Price</th>
                           <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">Status</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Next Billing</th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">End Date</th>
                           <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">Actions</th>
                         </tr>
                       </thead>
@@ -237,16 +248,25 @@ export default function MyPurchases() {
                               </span>
                             </td>
                             <td className="py-3 px-4 text-sm text-gray-600">
-                              {item.nextBillingDate ? new Date(item.nextBillingDate).toLocaleDateString() : 'N/A'}
+                              {item.endDate ? new Date(item.endDate).toLocaleDateString() : 'N/A'}
                             </td>
                             <td className="py-3 px-4 text-center">
                               <div className="flex items-center justify-center gap-2">
-                                <Link
-                                  to={`/subscriptions/${item.subscriptionId}/dashboard`}
-                                  className="text-blue-600 hover:text-blue-700 font-medium text-sm"
-                                >
-                                  View Dashboard
-                                </Link>
+                                {item.status === 'Pending' ? (
+                                  <Link
+                                    to={`/payments?subscriptionId=${item.subscriptionId}`}
+                                    className="text-green-600 hover:text-green-700 font-medium text-sm"
+                                  >
+                                    Complete Payment
+                                  </Link>
+                                ) : (
+                                  <Link
+                                    to={`/subscriptions/${item.subscriptionId}/dashboard`}
+                                    className="text-blue-600 hover:text-blue-700 font-medium text-sm"
+                                  >
+                                    View Dashboard
+                                  </Link>
+                                )}
                                 {item.status === 'Active' && (
                                   <>
                                     <span className="text-gray-300">|</span>
@@ -273,7 +293,13 @@ export default function MyPurchases() {
                       </svg>
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">No Subscriptions</h3>
-                    <p className="text-gray-600">Subscribe for real-time dashboard access</p>
+                    <p className="text-gray-600 mb-6">Subscribe for real-time dashboard access</p>
+                    <Link
+                      to="/buy-subscription"
+                      className="inline-block bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all"
+                    >
+                      Buy Subscription →
+                    </Link>
                   </div>
                 )}
               </div>
@@ -335,7 +361,13 @@ export default function MyPurchases() {
                       </svg>
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">No API Packages</h3>
-                    <p className="text-gray-600">Purchase API access for programmatic data retrieval</p>
+                    <p className="text-gray-600 mb-6">Purchase API access for programmatic data retrieval</p>
+                    <Link
+                      to="/buy-api"
+                      className="inline-block bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all"
+                    >
+                      Buy API Package →
+                    </Link>
                   </div>
                 )}
               </div>

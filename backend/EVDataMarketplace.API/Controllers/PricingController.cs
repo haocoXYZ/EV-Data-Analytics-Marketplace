@@ -8,7 +8,7 @@ namespace EVDataMarketplace.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin")]
+[Authorize] // Base authorization - all authenticated users
 public class PricingController : ControllerBase
 {
     private readonly EVDataMarketplaceDbContext _context;
@@ -19,7 +19,7 @@ public class PricingController : ControllerBase
     }
 
     /// <summary>
-    /// Get all system pricing
+    /// Get all system pricing (accessible to all authenticated users)
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetPricing()
@@ -46,7 +46,7 @@ public class PricingController : ControllerBase
     }
 
     /// <summary>
-    /// Get pricing by ID
+    /// Get pricing by ID (accessible to all authenticated users)
     /// </summary>
     [HttpGet("{id}")]
     public async Task<IActionResult> GetPricingById(int id)
@@ -75,9 +75,10 @@ public class PricingController : ControllerBase
     }
 
     /// <summary>
-    /// Update pricing
+    /// Update pricing (Admin only)
     /// </summary>
     [HttpPut("{id}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpdatePricing(int id, [FromBody] UpdatePricingDto dto)
     {
         var pricing = await _context.SystemPricings.FindAsync(id);
@@ -146,9 +147,10 @@ public class PricingController : ControllerBase
     }
 
     /// <summary>
-    /// Toggle pricing active status
+    /// Toggle pricing active status (Admin only)
     /// </summary>
     [HttpPatch("{id}/toggle-active")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> ToggleActive(int id)
     {
         var pricing = await _context.SystemPricings.FindAsync(id);

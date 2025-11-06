@@ -21,7 +21,7 @@ export default function ProviderLayout({ children }: ProviderLayoutProps) {
     { path: '/provider/dashboard', label: 'Dashboard', icon: '📊' },
     { path: '/provider/new', label: 'B2: Upload Dataset', icon: '➕' },
     { path: '/catalog', label: 'Xem Datasets', icon: '📁' },
-    { path: '/admin/pricing', label: 'Xem Pricing', icon: '💰' },
+    { path: '/provider/pricing', label: 'Xem Pricing', icon: '💰' },
   ]
 
   return (

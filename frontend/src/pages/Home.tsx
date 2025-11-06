@@ -58,10 +58,22 @@ export default function Home() {
                   </svg>
                 </Link>
                 <Link
-                  to="/catalog"
-                  className="bg-transparent text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-white/10 transition-all border-2 border-white/30 backdrop-blur-sm"
+                  to="/buy-subscription"
+                  className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:from-purple-600 hover:to-indigo-600 transition-all shadow-xl hover:shadow-2xl hover:scale-105 inline-flex items-center"
                 >
-                  Xem danh sách datasets
+                  Đăng ký Dashboard
+                  <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                </Link>
+                <Link
+                  to="/buy-api"
+                  className="bg-transparent text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-white/10 transition-all border-2 border-white/30 backdrop-blur-sm inline-flex items-center"
+                >
+                  Mua gói API
+                  <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  </svg>
                 </Link>
               </div>
             </div>
@@ -119,18 +131,24 @@ export default function Home() {
                 </p>
               </div>
               
-              <div className="bg-white rounded-2xl shadow-lg p-8 text-center hover:shadow-xl transition-shadow">
+              <Link to="/buy-subscription" className="bg-white rounded-2xl shadow-lg p-8 text-center hover:shadow-xl transition-all hover:scale-105 block">
                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                 </div>
                 <h3 className="text-xl font-bold mb-3">Dashboard thời gian thực</h3>
-                <p className="text-gray-600">
+                <p className="text-gray-600 mb-4">
                   Thuê bao theo tháng để theo dõi xu hướng sạc xe điện. 
                   Biểu đồ trực quan, cập nhật liên tục cho khu vực của bạn.
                 </p>
-              </div>
+                <span className="text-green-600 font-semibold inline-flex items-center">
+                  Đăng ký ngay
+                  <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </span>
+              </Link>
               
               <div className="bg-white rounded-2xl shadow-lg p-8 text-center hover:shadow-xl transition-shadow">
                 <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -192,12 +210,26 @@ export default function Home() {
             <p className="text-xl text-blue-100 mb-8">
               Khám phá dữ liệu EV chất lượng cao theo khu vực của bạn
             </p>
-            <Link
-              to="/buy-data"
-              className="inline-block bg-white text-blue-700 px-8 py-4 rounded-xl font-semibold text-lg hover:bg-blue-50 transition-all shadow-xl hover:shadow-2xl hover:scale-105"
-            >
-              Mua dữ liệu ngay →
-            </Link>
+            <div className="flex flex-wrap justify-center gap-4">
+              <Link
+                to="/buy-data"
+                className="inline-block bg-white text-blue-700 px-8 py-4 rounded-xl font-semibold text-lg hover:bg-blue-50 transition-all shadow-xl hover:shadow-2xl hover:scale-105"
+              >
+                Mua dữ liệu ngay →
+              </Link>
+              <Link
+                to="/buy-subscription"
+                className="inline-block bg-gradient-to-r from-purple-500 to-indigo-500 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:from-purple-600 hover:to-indigo-600 transition-all shadow-xl hover:shadow-2xl hover:scale-105"
+              >
+                Đăng ký Dashboard →
+              </Link>
+              <Link
+                to="/buy-api"
+                className="inline-block bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:from-indigo-600 hover:to-purple-600 transition-all shadow-xl hover:shadow-2xl hover:scale-105"
+              >
+                Mua gói API →
+              </Link>
+            </div>
           </div>
         </div>
       </div>

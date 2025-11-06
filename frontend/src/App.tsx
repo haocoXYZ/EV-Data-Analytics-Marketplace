@@ -4,7 +4,9 @@ import Home from './pages/Home'
 import Catalog from './pages/Catalog'
 import DatasetDetail from './pages/DatasetDetail'
 import DataPackagePurchase from './pages/DataPackagePurchase'
+import SubscriptionPurchase from './pages/SubscriptionPurchase'
 import SubscriptionDashboard from './pages/SubscriptionDashboard'
+import APIPackagePurchase from './pages/APIPackagePurchase'
 import APIPackageKeys from './pages/APIPackageKeys'
 import Checkout from './pages/Checkout'
 import Success from './pages/Success'
@@ -17,6 +19,7 @@ import ModeratorReview from './pages/ModeratorReview'
 import AdminPayouts from './pages/AdminPayouts'
 import AdminDashboard from './pages/AdminDashboard'
 import ProviderDashboard from './pages/ProviderDashboard'
+import ProviderPricing from './pages/ProviderPricing'
 import Login from './pages/Login'
 import Register from './pages/Register'
 
@@ -29,6 +32,8 @@ export default function App() {
       <Route path="/catalog" element={<Catalog />} />
       <Route path="/dataset/:id" element={<DatasetDetail />} />
       <Route path="/buy-data" element={<DataPackagePurchase />} />
+      <Route path="/buy-subscription" element={<SubscriptionPurchase />} />
+      <Route path="/buy-api" element={<APIPackagePurchase />} />
       <Route path="/checkout" element={<Checkout />} />
       <Route path="/success" element={<Success />} />
       <Route path="/payment-success" element={<PaymentSuccess />} />
@@ -42,6 +47,7 @@ export default function App() {
       <Route path="/moderator/review" element={<ModeratorReview />} />
       <Route path="/provider/dashboard" element={<ProviderDashboard />} />
       <Route path="/provider/new" element={<ProviderNew />} />
+      <Route path="/provider/pricing" element={<ProviderPricing />} />
     </Routes>
   )
 }

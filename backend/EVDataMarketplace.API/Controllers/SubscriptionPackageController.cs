@@ -201,6 +201,7 @@ public class SubscriptionPackageController : ControllerBase
         var totalRecords = allRecords.Count;
         var totalEnergy = allRecords.Sum(r => r.EnergyKwh);
         var avgEnergy = totalRecords > 0 ? allRecords.Average(r => r.EnergyKwh) : 0;
+        var avgDuration = totalRecords > 0 ? allRecords.Where(r => r.DurationMinutes.HasValue).Average(r => r.DurationMinutes!.Value) : 0;
         var uniqueStations = allRecords.Select(r => r.StationId).Distinct().Count();
 
         return Ok(new
@@ -219,6 +220,7 @@ public class SubscriptionPackageController : ControllerBase
                 totalRecords,
                 totalEnergyKwh = Math.Round(totalEnergy, 2),
                 averageEnergyKwh = Math.Round(avgEnergy, 2),
+                averageChargingDuration = Math.Round(avgDuration, 2),
                 uniqueStations,
                 dataRangeDays = 30
             }

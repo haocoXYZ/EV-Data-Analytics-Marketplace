@@ -15,6 +15,18 @@ export default function APIPackageKeys() {
     const [successMessage, setSuccessMessage] = useState<string | null>(null)
     const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
+    // API Testing states
+    const [selectedApiKey, setSelectedApiKey] = useState<string>('')
+    const [testParams, setTestParams] = useState({
+        provinceId: '',
+        districtId: '',
+        startDate: '',
+        endDate: ''
+    })
+    const [testLoading, setTestLoading] = useState(false)
+    const [testResult, setTestResult] = useState<any>(null)
+    const [testError, setTestError] = useState<string | null>(null)
+
     useEffect(() => {
         if (purchaseId) {
             loadPackageData(parseInt(purchaseId))
@@ -84,6 +96,45 @@ export default function APIPackageKeys() {
         navigator.clipboard.writeText(apiKey)
         setCopiedKey(apiKey)
         setTimeout(() => setCopiedKey(null), 2000)
+    }
+
+    const handleTestAPI = async () => {
+        if (!selectedApiKey) {
+            setTestError('Please select an API key')
+            return
+        }
+
+        setTestLoading(true)
+        setTestError(null)
+        setTestResult(null)
+
+        try {
+            const params: any = {}
+            if (testParams.provinceId) params.provinceId = parseInt(testParams.provinceId)
+            if (testParams.districtId) params.districtId = parseInt(testParams.districtId)
+            if (testParams.startDate) params.startDate = testParams.startDate
+            if (testParams.endDate) params.endDate = testParams.endDate
+
+            const result = await apiKeysApi.getData(selectedApiKey, params)
+            setTestResult(result)
+            
+            // Reload package data to update usage stats
+            if (purchaseId) {
+                loadPackageData(parseInt(purchaseId))
+            }
+        } catch (err: any) {
+            setTestError(err.response?.data?.message || err.message || 'Failed to query data')
+        } finally {
+            setTestLoading(false)
+        }
+    }
+
+    const handleCopyTestResult = () => {
+        if (testResult) {
+            navigator.clipboard.writeText(JSON.stringify(testResult, null, 2))
+            setSuccessMessage('Test result copied to clipboard!')
+            setTimeout(() => setSuccessMessage(null), 2000)
+        }
     }
 
     const getStatusBadge = (status: string) => {
@@ -319,13 +370,160 @@ export default function APIPackageKeys() {
                         )}
                     </div>
 
+                    {/* API Testing Section */}
+                    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-8">
+                        <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                            <svg className="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                            </svg>
+                            Test API Live
+                        </h2>
+
+                        {/* Select API Key */}
+                        <div className="mb-6">
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                1. Select API Key to Test
+                            </label>
+                            <select
+                                value={selectedApiKey}
+                                onChange={(e) => setSelectedApiKey(e.target.value)}
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                disabled={keys.filter(k => k.isActive).length === 0}
+                            >
+                                <option value="">-- Select an Active API Key --</option>
+                                {keys.filter(k => k.isActive).map((key) => (
+                                    <option key={key.keyId} value={key.apiKey}>
+                                        {key.keyName || 'Unnamed'} - {key.apiKey.substring(0, 30)}...
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Query Parameters */}
+                        <div className="mb-6">
+                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                                2. Enter Query Parameters (Optional)
+                            </label>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs text-gray-600 mb-1">Province ID</label>
+                                    <input
+                                        type="number"
+                                        value={testParams.provinceId}
+                                        onChange={(e) => setTestParams({ ...testParams, provinceId: e.target.value })}
+                                        placeholder="e.g., 1"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-600 mb-1">District ID</label>
+                                    <input
+                                        type="number"
+                                        value={testParams.districtId}
+                                        onChange={(e) => setTestParams({ ...testParams, districtId: e.target.value })}
+                                        placeholder="e.g., 1"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-600 mb-1">Start Date</label>
+                                    <input
+                                        type="date"
+                                        value={testParams.startDate}
+                                        onChange={(e) => setTestParams({ ...testParams, startDate: e.target.value })}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-600 mb-1">End Date</label>
+                                    <input
+                                        type="date"
+                                        value={testParams.endDate}
+                                        onChange={(e) => setTestParams({ ...testParams, endDate: e.target.value })}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Test Button */}
+                        <button
+                            onClick={handleTestAPI}
+                            disabled={testLoading || !selectedApiKey}
+                            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                            {testLoading ? (
+                                <>
+                                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    Testing API...
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                    </svg>
+                                    Test API Now
+                                </>
+                            )}
+                        </button>
+
+                        {/* Test Error */}
+                        {testError && (
+                            <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                                <svg className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <div>
+                                    <p className="text-red-800 font-semibold">API Test Failed</p>
+                                    <p className="text-red-700 text-sm mt-1">{testError}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Test Result */}
+                        {testResult && (
+                            <div className="mt-4">
+                                <div className="flex items-center justify-between mb-2">
+                                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        API Response
+                                    </h3>
+                                    <button
+                                        onClick={handleCopyTestResult}
+                                        className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                        </svg>
+                                        Copy
+                                    </button>
+                                </div>
+                                <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto max-h-96">
+                                    <pre className="text-sm text-green-400 font-mono">
+                                        {JSON.stringify(testResult, null, 2)}
+                                    </pre>
+                                </div>
+                                {testResult.data && Array.isArray(testResult.data) && (
+                                    <p className="text-sm text-gray-600 mt-2">
+                                        ✅ Returned <strong>{testResult.data.length}</strong> record(s)
+                                    </p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
                     {/* Example Usage */}
                     <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl shadow-lg p-6 text-white">
                         <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
                             </svg>
-                            Example API Usage
+                            Example API Usage (cURL)
                         </h3>
                         <div className="bg-black bg-opacity-50 rounded-lg p-4 overflow-x-auto">
                             <pre className="text-sm text-green-400 font-mono">
