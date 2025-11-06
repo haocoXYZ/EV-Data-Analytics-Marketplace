@@ -137,7 +137,7 @@ public class SubscriptionPackageController : ControllerBase
     /// Get dashboard analytics for active subscription
     /// </summary>
     [HttpGet("{subscriptionId}/dashboard")]
-    public async Task<IActionResult> GetDashboard(int subscriptionId)
+    public async Task<IActionResult> GetDashboard(int subscriptionId, [FromQuery] int? days = null)
     {
         var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
         if (string.IsNullOrEmpty(userEmail))
@@ -191,11 +191,26 @@ public class SubscriptionPackageController : ControllerBase
             query = query.Where(r => r.DistrictId == subscription.DistrictId.Value);
         }
 
-        // Get last 30 days of data
-        var thirtyDaysAgo = DateTime.Now.AddDays(-30);
-        query = query.Where(r => r.ChargingTimestamp >= thirtyDaysAgo);
+        // Apply date filter if specified, otherwise get all available data
+        DateTime? filterStartDate = null;
+        int actualDaysRange = 0;
+
+        if (days.HasValue && days.Value > 0)
+        {
+            filterStartDate = DateTime.Now.AddDays(-days.Value);
+            query = query.Where(r => r.ChargingTimestamp >= filterStartDate.Value);
+            actualDaysRange = days.Value;
+        }
 
         var allRecords = await query.ToListAsync();
+
+        // Calculate actual date range from data
+        if (allRecords.Any())
+        {
+            var minDate = allRecords.Min(r => r.ChargingTimestamp);
+            var maxDate = allRecords.Max(r => r.ChargingTimestamp);
+            actualDaysRange = (int)(maxDate - minDate).TotalDays + 1;
+        }
 
         // Calculate statistics
         var totalRecords = allRecords.Count;
@@ -222,7 +237,12 @@ public class SubscriptionPackageController : ControllerBase
                 averageEnergyKwh = Math.Round(avgEnergy, 2),
                 averageChargingDuration = Math.Round(avgDuration, 2),
                 uniqueStations,
-                dataRangeDays = 30
+                dataRangeDays = actualDaysRange,
+                dataDateRange = allRecords.Any() ? new
+                {
+                    from = allRecords.Min(r => r.ChargingTimestamp),
+                    to = allRecords.Max(r => r.ChargingTimestamp)
+                } : null
             }
         });
     }
@@ -231,7 +251,7 @@ public class SubscriptionPackageController : ControllerBase
     /// Get energy consumption over time chart data
     /// </summary>
     [HttpGet("{subscriptionId}/charts/energy-over-time")]
-    public async Task<IActionResult> GetEnergyOverTimeChart(int subscriptionId, [FromQuery] int days = 30)
+    public async Task<IActionResult> GetEnergyOverTimeChart(int subscriptionId, [FromQuery] int? days = null)
     {
         var subscription = await ValidateSubscriptionAccess(subscriptionId);
         if (subscription == null)
@@ -239,14 +259,20 @@ public class SubscriptionPackageController : ControllerBase
             return BadRequest(new { message = "Invalid subscription or access denied" });
         }
 
-        var startDate = DateTime.Now.AddDays(-days);
-
-        var data = await _context.DatasetRecords
+        var query = _context.DatasetRecords
             .Include(r => r.Dataset)
             .Where(r => r.ProvinceId == subscription.ProvinceId)
             .Where(r => r.Dataset!.ModerationStatus == "Approved")
-            .Where(r => r.ChargingTimestamp >= startDate)
-            .Where(r => !subscription.DistrictId.HasValue || r.DistrictId == subscription.DistrictId.Value)
+            .Where(r => !subscription.DistrictId.HasValue || r.DistrictId == subscription.DistrictId.Value);
+
+        // Apply date filter only if days parameter is provided
+        if (days.HasValue && days.Value > 0)
+        {
+            var startDate = DateTime.Now.AddDays(-days.Value);
+            query = query.Where(r => r.ChargingTimestamp >= startDate);
+        }
+
+        var data = await query
             .GroupBy(r => r.ChargingTimestamp.Date)
             .Select(g => new
             {
@@ -260,7 +286,9 @@ public class SubscriptionPackageController : ControllerBase
         return Ok(new
         {
             chartType = "Energy Over Time",
-            dataPoints = data
+            dataPoints = data,
+            daysFilter = days,
+            totalDataPoints = data.Count
         });
     }
 
@@ -268,7 +296,7 @@ public class SubscriptionPackageController : ControllerBase
     /// Get station distribution chart data
     /// </summary>
     [HttpGet("{subscriptionId}/charts/station-distribution")]
-    public async Task<IActionResult> GetStationDistributionChart(int subscriptionId)
+    public async Task<IActionResult> GetStationDistributionChart(int subscriptionId, [FromQuery] int? days = null, [FromQuery] int top = 10)
     {
         var subscription = await ValidateSubscriptionAccess(subscriptionId);
         if (subscription == null)
@@ -276,14 +304,20 @@ public class SubscriptionPackageController : ControllerBase
             return BadRequest(new { message = "Invalid subscription or access denied" });
         }
 
-        var thirtyDaysAgo = DateTime.Now.AddDays(-30);
-
-        var data = await _context.DatasetRecords
+        var query = _context.DatasetRecords
             .Include(r => r.Dataset)
             .Where(r => r.ProvinceId == subscription.ProvinceId)
             .Where(r => r.Dataset!.ModerationStatus == "Approved")
-            .Where(r => r.ChargingTimestamp >= thirtyDaysAgo)
-            .Where(r => !subscription.DistrictId.HasValue || r.DistrictId == subscription.DistrictId.Value)
+            .Where(r => !subscription.DistrictId.HasValue || r.DistrictId == subscription.DistrictId.Value);
+
+        // Apply date filter only if days parameter is provided
+        if (days.HasValue && days.Value > 0)
+        {
+            var startDate = DateTime.Now.AddDays(-days.Value);
+            query = query.Where(r => r.ChargingTimestamp >= startDate);
+        }
+
+        var data = await query
             .GroupBy(r => new { r.StationId, r.StationName })
             .Select(g => new
             {
@@ -293,13 +327,15 @@ public class SubscriptionPackageController : ControllerBase
                 recordCount = g.Count()
             })
             .OrderByDescending(g => g.totalEnergy)
-            .Take(10)
+            .Take(top)
             .ToListAsync();
 
         return Ok(new
         {
-            chartType = "Top 10 Stations by Energy",
-            dataPoints = data
+            chartType = $"Top {top} Stations by Energy",
+            dataPoints = data,
+            daysFilter = days,
+            totalStations = data.Count
         });
     }
 
@@ -307,7 +343,7 @@ public class SubscriptionPackageController : ControllerBase
     /// Get peak hours analysis
     /// </summary>
     [HttpGet("{subscriptionId}/charts/peak-hours")]
-    public async Task<IActionResult> GetPeakHoursChart(int subscriptionId)
+    public async Task<IActionResult> GetPeakHoursChart(int subscriptionId, [FromQuery] int? days = null)
     {
         var subscription = await ValidateSubscriptionAccess(subscriptionId);
         if (subscription == null)
@@ -315,24 +351,29 @@ public class SubscriptionPackageController : ControllerBase
             return BadRequest(new { message = "Invalid subscription or access denied" });
         }
 
-        var thirtyDaysAgo = DateTime.Now.AddDays(-30);
-
-        var data = await _context.DatasetRecords
+        var query = _context.DatasetRecords
             .Include(r => r.Dataset)
             .Where(r => r.ProvinceId == subscription.ProvinceId)
             .Where(r => r.Dataset!.ModerationStatus == "Approved")
-            .Where(r => r.ChargingTimestamp >= thirtyDaysAgo)
-            .Where(r => !subscription.DistrictId.HasValue || r.DistrictId == subscription.DistrictId.Value)
-            .ToListAsync();
+            .Where(r => !subscription.DistrictId.HasValue || r.DistrictId == subscription.DistrictId.Value);
+
+        // Apply date filter only if days parameter is provided
+        if (days.HasValue && days.Value > 0)
+        {
+            var startDate = DateTime.Now.AddDays(-days.Value);
+            query = query.Where(r => r.ChargingTimestamp >= startDate);
+        }
+
+        var data = await query.ToListAsync();
 
         var hourlyData = data
             .GroupBy(r => r.ChargingTimestamp.Hour)
             .Select(g => new
             {
                 hour = g.Key,
-                totalEnergy = g.Sum(r => r.EnergyKwh),
+                totalEnergy = Math.Round(g.Sum(r => r.EnergyKwh), 2),
                 recordCount = g.Count(),
-                avgEnergy = g.Average(r => r.EnergyKwh)
+                avgEnergy = Math.Round(g.Average(r => r.EnergyKwh), 2)
             })
             .OrderBy(g => g.hour)
             .ToList();
@@ -340,7 +381,9 @@ public class SubscriptionPackageController : ControllerBase
         return Ok(new
         {
             chartType = "Peak Hours Analysis",
-            dataPoints = hourlyData
+            dataPoints = hourlyData,
+            daysFilter = days,
+            totalRecords = data.Count
         });
     }
 

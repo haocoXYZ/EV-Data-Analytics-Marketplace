@@ -45,8 +45,11 @@ export const subscriptionsApi = {
   /**
    * GET /api/subscription-packages/{id}/charts/energy-over-time
    * Get energy consumption over time chart data
+   * @param subscriptionId - The subscription ID
+   * @param days - Optional number of days to filter (undefined = all data)
    */
-  getEnergyOverTime: async (subscriptionId: number, days: number = 30): Promise<ChartDataPoint[]> => {
+  getEnergyOverTime: async (subscriptionId: number, days?: number): Promise<ChartDataPoint[]> => {
+    const params = days ? { days } : {}
     const response = await client.get<{
       chartType: string
       dataPoints: Array<{
@@ -54,7 +57,7 @@ export const subscriptionsApi = {
         totalEnergy: number
         recordCount: number
       }>
-    }>(`/subscription-packages/${subscriptionId}/charts/energy-over-time`, { params: { days } })
+    }>(`/subscription-packages/${subscriptionId}/charts/energy-over-time`, { params })
 
     // Transform backend response to {label, value} format
     return response.data.dataPoints.map(point => ({
@@ -67,8 +70,14 @@ export const subscriptionsApi = {
   /**
    * GET /api/subscription-packages/{id}/charts/station-distribution
    * Get station distribution chart data
+   * @param subscriptionId - The subscription ID
+   * @param days - Optional number of days to filter (undefined = all data)
+   * @param top - Number of top stations to return (default 10)
    */
-  getStationDistribution: async (subscriptionId: number): Promise<ChartDataPoint[]> => {
+  getStationDistribution: async (subscriptionId: number, days?: number, top: number = 10): Promise<ChartDataPoint[]> => {
+    const params: any = { top }
+    if (days) params.days = days
+
     const response = await client.get<{
       chartType: string
       dataPoints: Array<{
@@ -77,7 +86,7 @@ export const subscriptionsApi = {
         totalEnergy: number
         recordCount: number
       }>
-    }>(`/subscription-packages/${subscriptionId}/charts/station-distribution`)
+    }>(`/subscription-packages/${subscriptionId}/charts/station-distribution`, { params })
 
     // Transform backend response to {label, value} format
     return response.data.dataPoints.map(point => ({
@@ -89,8 +98,11 @@ export const subscriptionsApi = {
   /**
    * GET /api/subscription-packages/{id}/charts/peak-hours
    * Get peak charging hours chart data
+   * @param subscriptionId - The subscription ID
+   * @param days - Optional number of days to filter (undefined = all data)
    */
-  getPeakHours: async (subscriptionId: number): Promise<ChartDataPoint[]> => {
+  getPeakHours: async (subscriptionId: number, days?: number): Promise<ChartDataPoint[]> => {
+    const params = days ? { days } : {}
     const response = await client.get<{
       chartType: string
       dataPoints: Array<{
@@ -99,7 +111,7 @@ export const subscriptionsApi = {
         recordCount: number
         avgEnergy: number
       }>
-    }>(`/subscription-packages/${subscriptionId}/charts/peak-hours`)
+    }>(`/subscription-packages/${subscriptionId}/charts/peak-hours`, { params })
 
     // Transform backend response to {label, value} format
     return response.data.dataPoints.map(point => ({

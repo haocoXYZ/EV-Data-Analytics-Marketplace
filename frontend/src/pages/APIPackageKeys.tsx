@@ -508,10 +508,12 @@ export default function APIPackageKeys() {
                                         {JSON.stringify(testResult, null, 2)}
                                     </pre>
                                 </div>
-                                {testResult.data && Array.isArray(testResult.data) && (
-                                    <p className="text-sm text-gray-600 mt-2">
-                                        ✅ Returned <strong>{testResult.data.length}</strong> record(s)
-                                    </p>
+                                {testResult.records && Array.isArray(testResult.records) && (
+                                    <div className="text-sm text-gray-600 mt-2 space-y-1">
+                                        <p>✅ Returned <strong>{testResult.records.length}</strong> record(s) out of <strong>{testResult.totalRecords}</strong> total</p>
+                                        <p>📄 Page <strong>{testResult.currentPage}</strong> of <strong>{testResult.totalPages}</strong></p>
+                                        <p>🔄 Remaining API calls: <strong className="text-orange-600">{testResult.remainingCalls}</strong></p>
+                                    </div>
                                 )}
                             </div>
                         )}

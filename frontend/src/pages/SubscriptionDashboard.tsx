@@ -32,7 +32,7 @@ export default function SubscriptionDashboard() {
         try {
             const [dashboard, energy, stations, hours] = await Promise.all([
                 subscriptionsApi.getDashboard(id),
-                subscriptionsApi.getEnergyOverTime(id, 30),
+                subscriptionsApi.getEnergyOverTime(id), // No days parameter = get all available data
                 subscriptionsApi.getStationDistribution(id),
                 subscriptionsApi.getPeakHours(id),
             ])
