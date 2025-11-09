@@ -5,7 +5,8 @@ import { RevenueSummary, Payout } from '../types'
 
 export default function AdminPayouts() {
   const [revenueSummary, setRevenueSummary] = useState<any>(null)
-  const [payouts, setPayouts] = useState<any[]>([])
+  const [payouts, setPayouts] = useState<any[]>([]) // Payouts for selected month
+  const [allPayoutsHistory, setAllPayoutsHistory] = useState<any[]>([]) // All payouts for history table
   const [loading, setLoading] = useState(true)
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7))
   const [generatingPayouts, setGeneratingPayouts] = useState(false)
@@ -17,12 +18,26 @@ export default function AdminPayouts() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [summary, allPayouts] = await Promise.all([
+      const [summary, monthPayouts, allHistory] = await Promise.all([
         payoutsApi.getRevenueSummary(selectedMonth),
-        payoutsApi.getAll()
+        payoutsApi.getAll({ monthYear: selectedMonth }),
+        payoutsApi.getAll() // All payouts for history table
       ])
+
+      // Debug logging
+      console.log('=== ADMIN PAYOUTS DEBUG ===')
+      console.log('Selected Month:', selectedMonth)
+      console.log('Revenue Summary:', summary)
+      console.log('Month Payouts:', monthPayouts)
+      console.log('All History:', allHistory)
+      console.log('Total Provider Payout:', summary?.totalProviderPayout)
+      console.log('Total Admin Revenue:', summary?.totalAdminRevenue)
+      console.log('Providers Count:', summary?.providers?.length)
+      console.log('===========================')
+
       setRevenueSummary(summary)
-      setPayouts(allPayouts)
+      setPayouts(monthPayouts)
+      setAllPayoutsHistory(allHistory)
     } catch (error) {
       console.error('Failed to load payout data:', error)
       alert('Lỗi tải dữ liệu payouts: ' + (error as Error).message)
@@ -66,18 +81,19 @@ export default function AdminPayouts() {
   }
 
   const getTotalPending = () => {
-    return payouts
-      .filter((p: any) => p.payoutStatus === 'Pending')
-      .reduce((sum: number, p: any) => sum + (p.totalDue || 0), 0)
+    // Pending revenue from summary (already filtered by selectedMonth)
+    return revenueSummary?.totalProviderPayout || 0
   }
 
   const getTotalPaid = () => {
+    // Completed payouts for selected month
     return payouts
       .filter((p: any) => p.payoutStatus === 'Completed')
       .reduce((sum: number, p: any) => sum + (p.totalDue || 0), 0)
   }
 
   const getAdminTotal = () => {
+    // Admin revenue from summary (already filtered by selectedMonth)
     return revenueSummary?.totalAdminRevenue || 0
   }
 
@@ -171,8 +187,8 @@ export default function AdminPayouts() {
                       </td>
                       <td className="py-4 px-6 text-right">
                         <span className="font-semibold text-green-600">
-                          {/* Show completed payouts from payouts list */}
-                          {payouts
+                          {/* Show completed payouts from all history */}
+                          {allPayoutsHistory
                             .filter((p: any) => p.providerId === provider.providerId && p.payoutStatus === 'Completed')
                             .reduce((sum: number, p: any) => sum + p.totalDue, 0)
                             .toLocaleString('vi-VN')} đ
@@ -180,8 +196,8 @@ export default function AdminPayouts() {
                       </td>
                       <td className="py-4 px-6 text-right">
                         <span className="font-bold text-gray-900">
-                          {(provider.totalDue + 
-                            payouts
+                          {(provider.totalDue +
+                            allPayoutsHistory
                               .filter((p: any) => p.providerId === provider.providerId && p.payoutStatus === 'Completed')
                               .reduce((sum: number, p: any) => sum + p.totalDue, 0)
                           ).toLocaleString('vi-VN')} đ
@@ -272,7 +288,7 @@ export default function AdminPayouts() {
           </div>
 
           <div className="overflow-x-auto">
-            {payouts.length > 0 ? (
+            {allPayoutsHistory.length > 0 ? (
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
@@ -285,7 +301,7 @@ export default function AdminPayouts() {
                   </tr>
                 </thead>
                 <tbody>
-                  {payouts.map((payout: any) => (
+                  {allPayoutsHistory.map((payout: any) => (
                     <tr key={payout.payoutId} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-4 px-6">
                         <div className="font-semibold text-gray-900">{payout.providerName}</div>

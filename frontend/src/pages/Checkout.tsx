@@ -13,7 +13,7 @@ export default function Checkout() {
 
   useEffect(() => {
     if (!referenceId) {
-      navigate('/catalog')
+      navigate('/')
     }
   }, [referenceId, navigate])
 

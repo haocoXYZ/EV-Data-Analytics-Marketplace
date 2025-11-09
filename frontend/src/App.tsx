@@ -1,7 +1,6 @@
 import React from 'react'
 import { Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
-import Catalog from './pages/Catalog'
 import DatasetDetail from './pages/DatasetDetail'
 import DataPackagePurchase from './pages/DataPackagePurchase'
 import SubscriptionPurchase from './pages/SubscriptionPurchase'
@@ -29,7 +28,6 @@ export default function App() {
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
-      <Route path="/catalog" element={<Catalog />} />
       <Route path="/dataset/:id" element={<DatasetDetail />} />
       <Route path="/buy-data" element={<DataPackagePurchase />} />
       <Route path="/buy-subscription" element={<SubscriptionPurchase />} />
@@ -44,13 +42,15 @@ export default function App() {
       <Route path="/admin/dashboard" element={<AdminDashboard />} />
       <Route path="/admin/pricing" element={<AdminPricing />} />
       <Route path="/admin/payouts" element={<AdminPayouts />} />
-      <Route path="/moderator/review" element={<ModeratorReview />} />
+      <Route path="/admin/moderation" element={<ModeratorReview />} />
       <Route path="/provider/dashboard" element={<ProviderDashboard />} />
       <Route path="/provider/new" element={<ProviderNew />} />
       <Route path="/provider/pricing" element={<ProviderPricing />} />
     </Routes>
   )
 }
+
+
 
 
 

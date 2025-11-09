@@ -30,9 +30,6 @@ export default function Header() {
             <Link to="/" className="text-gray-700 hover:text-blue-600 font-medium">
               Home
             </Link>
-            <Link to="/catalog" className="text-gray-700 hover:text-blue-600 font-medium">
-              Catalog
-            </Link>
             {!user && (
               <Link to="/buy-data" className="text-blue-600 hover:text-blue-700 font-semibold">
                 Buy Data
@@ -61,7 +58,7 @@ export default function Header() {
                   </>
                 )}
                 {user.role === 'Moderator' && (
-                  <Link to="/moderator/review" className="text-gray-700 hover:text-blue-600 font-medium">
+                  <Link to="/admin/moderation" className="text-gray-700 hover:text-blue-600 font-medium">
                     Review
                   </Link>
                 )}

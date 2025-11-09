@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import ModeratorLayout from '../components/ModeratorLayout'
+import AdminLayout from '../components/AdminLayout'
 import { moderationApi } from '../api'
 import { Dataset, DataPreviewResponse, DatasetModerationDetail } from '../types'
 
@@ -119,7 +119,7 @@ export default function ModeratorReview() {
   }
 
   return (
-    <ModeratorLayout>
+    <AdminLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
@@ -579,6 +579,6 @@ export default function ModeratorReview() {
           </div>
         </div>
       )}
-    </ModeratorLayout>
+    </AdminLayout>
   )
 }

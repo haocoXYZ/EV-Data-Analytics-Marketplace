@@ -23,6 +23,20 @@ public class PayoutsController : ControllerBase
     [HttpGet("revenue-summary")]
     public async Task<ActionResult<object>> GetRevenueSummary([FromQuery] string? monthYear = null)
     {
+        // Validate monthYear format if provided
+        if (!string.IsNullOrEmpty(monthYear))
+        {
+            var parts = monthYear.Split('-');
+            if (parts.Length != 2 ||
+                !int.TryParse(parts[0], out int year) ||
+                !int.TryParse(parts[1], out int month) ||
+                year < 2000 || year > 2100 ||
+                month < 1 || month > 12)
+            {
+                return BadRequest(new { message = "Invalid monthYear format. Use YYYY-MM (e.g., 2025-11)" });
+            }
+        }
+
         var query = _context.RevenueShares
             .Include(rs => rs.DataProvider)
                 .ThenInclude(dp => dp!.User)
@@ -46,21 +60,21 @@ public class PayoutsController : ControllerBase
             })
             .Select(g => new
             {
-                g.Key.ProviderId,
-                g.Key.ProviderName,
-                g.Key.Email,
-                TotalDue = g.Sum(rs => rs.ProviderShare),
-                TransactionCount = g.Count(),
-                AdminShare = g.Sum(rs => rs.AdminShare)
+                providerId = g.Key.ProviderId,
+                providerName = g.Key.ProviderName,
+                email = g.Key.Email,
+                totalDue = g.Sum(rs => rs.ProviderShare),
+                transactionCount = g.Count(),
+                adminShare = g.Sum(rs => rs.AdminShare)
             })
             .ToListAsync();
 
         return Ok(new
         {
-            MonthYear = monthYear ?? DateTime.Now.ToString("yyyy-MM"),
-            Providers = summary,
-            TotalProviderPayout = summary.Sum(s => s.TotalDue),
-            TotalAdminRevenue = summary.Sum(s => s.AdminShare)
+            monthYear = monthYear ?? DateTime.Now.ToString("yyyy-MM"),
+            providers = summary,
+            totalProviderPayout = summary.Sum(s => s.totalDue),
+            totalAdminRevenue = summary.Sum(s => s.adminShare)
         });
     }
 

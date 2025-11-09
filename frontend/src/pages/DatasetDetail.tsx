@@ -49,8 +49,8 @@ export default function DatasetDetail() {
       <ConsumerLayout>
         <div className="max-w-7xl mx-auto px-4 py-12 text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Dataset không tìm thấy</h2>
-          <button onClick={() => navigate('/catalog')} className="text-blue-600 hover:text-blue-700">
-            ← Quay lại Catalog
+          <button onClick={() => navigate('/')} className="text-blue-600 hover:text-blue-700">
+            ← Quay lại Home
           </button>
         </div>
       </ConsumerLayout>
@@ -66,7 +66,7 @@ export default function DatasetDetail() {
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <Link to="/" className="hover:text-blue-600">Trang chủ</Link>
               <span>/</span>
-              <Link to="/catalog" className="hover:text-blue-600">Catalog</Link>
+              <Link to="/" className="hover:text-blue-600">Home</Link>
               <span>/</span>
               <span className="text-gray-900 font-medium">{dataset.name}</span>
             </div>
@@ -204,13 +204,13 @@ export default function DatasetDetail() {
 
                   <div className="mt-6 pt-6 border-t border-gray-200">
                     <Link 
-                      to="/catalog" 
+                      to="/" 
                       className="text-gray-600 hover:text-gray-900 text-sm inline-flex items-center"
                     >
                       <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                       </svg>
-                      Quay lại Catalog
+                      Quay lại Home
                     </Link>
                   </div>
                 </div>

@@ -18,10 +18,9 @@ export default function ProviderLayout({ children }: ProviderLayoutProps) {
   }
 
   const menuItems = [
-    { path: '/provider/dashboard', label: 'Dashboard', icon: '📊' },
-    { path: '/provider/new', label: 'B2: Upload Dataset', icon: '➕' },
-    { path: '/catalog', label: 'Xem Datasets', icon: '📁' },
-    { path: '/provider/pricing', label: 'Xem Pricing', icon: '💰' },
+    { path: '/provider/dashboard', label: 'Dashboard', icon: '📊', description: 'Tổng quan datasets & earnings' },
+    { path: '/provider/new', label: 'Upload Dataset', icon: '📤', description: 'Tải lên dataset mới' },
+    { path: '/provider/pricing', label: 'Xem Pricing', icon: '💰', description: 'Giá các gói dữ liệu' },
   ]
 
   return (

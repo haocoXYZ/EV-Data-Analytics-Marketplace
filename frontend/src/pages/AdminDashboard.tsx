@@ -174,7 +174,7 @@ export default function AdminDashboard() {
             </Link>
 
             <Link
-              to="/catalog"
+              to="/"
               className="group p-6 border-2 border-purple-200 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition-all text-center"
             >
               <div className="text-4xl mb-3">📊</div>
@@ -188,7 +188,7 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
           <div className="p-6 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-xl font-bold">Datasets gần đây</h2>
-            <Link to="/catalog" className="text-blue-600 hover:text-blue-700 font-medium text-sm">
+            <Link to="/" className="text-blue-600 hover:text-blue-700 font-medium text-sm">
               Xem tất cả →
             </Link>
           </div>
