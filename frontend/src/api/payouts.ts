@@ -48,6 +48,26 @@ export const payoutsApi = {
     const response = await client.get<Payout[]>(`/payouts/provider/${providerId}`)
     return response.data
   },
+
+  /**
+   * GET /api/payouts/package-sales
+   * Get package sales statistics (Admin only)
+   */
+  getPackageSales: async (monthYear?: string): Promise<any> => {
+    const params = monthYear ? { monthYear } : undefined
+    const response = await client.get('/payouts/package-sales', { params })
+    return response.data
+  },
+
+  /**
+   * GET /api/payouts/provider-packages/{providerId}
+   * Get package details for a specific provider (Admin only)
+   */
+  getProviderPackageDetails: async (providerId: number, monthYear?: string): Promise<any> => {
+    const params = monthYear ? { monthYear } : undefined
+    const response = await client.get(`/payouts/provider-packages/${providerId}`, { params })
+    return response.data
+  },
 }
 
 

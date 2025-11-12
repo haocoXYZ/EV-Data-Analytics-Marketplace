@@ -8,11 +8,9 @@ export * from './pricing'
 export * from './payouts'
 export * from './subscriptions'
 export * from './apiKeys'
-<<<<<<< Updated upstream
 export * from './locations'
-=======
 export * from './providers'
->>>>>>> Stashed changes
+export * from './admin'
 
 // Re-export client for direct use if needed
 export { default as client } from './client'

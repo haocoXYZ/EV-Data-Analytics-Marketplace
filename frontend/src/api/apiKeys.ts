@@ -70,10 +70,15 @@ export const apiKeysApi = {
   /**
    * GET /api/data
    * Public API endpoint (requires X-API-Key header)
+   * Now supports both ID and Name formats:
+   * - provinceId/districtId (old way, still works)
+   * - province/district (new way, recommended - uses names)
    */
   getData: async (apiKey: string, params: {
     provinceId?: number
     districtId?: number
+    province?: string
+    district?: string
     startDate?: string
     endDate?: string
     page?: number

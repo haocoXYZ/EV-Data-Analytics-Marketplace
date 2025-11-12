@@ -388,6 +388,192 @@ public class SubscriptionPackageController : ControllerBase
     }
 
     /// <summary>
+    /// Upgrade subscription to a higher billing cycle with prorated credit
+    /// </summary>
+    [HttpPost("upgrade")]
+    public async Task<IActionResult> UpgradeSubscription([FromBody] UpgradeSubscriptionDto dto)
+    {
+        var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+        if (string.IsNullOrEmpty(userEmail))
+        {
+            return Unauthorized(new { message = "User email not found" });
+        }
+
+        var consumer = await _context.DataConsumers
+            .Include(c => c.User)
+            .FirstOrDefaultAsync(c => c.User.Email == userEmail);
+
+        if (consumer == null)
+        {
+            return NotFound(new { message = "Consumer profile not found" });
+        }
+
+        // Get current subscription
+        var currentSubscription = await _context.SubscriptionPackagePurchases
+            .Include(s => s.Province)
+            .Include(s => s.District)
+            .FirstOrDefaultAsync(s => s.SubscriptionId == dto.CurrentSubscriptionId && s.ConsumerId == consumer.ConsumerId);
+
+        if (currentSubscription == null)
+        {
+            return NotFound(new { message = "Current subscription not found" });
+        }
+
+        if (currentSubscription.Status != "Active")
+        {
+            return BadRequest(new { message = $"Cannot upgrade subscription with status: {currentSubscription.Status}" });
+        }
+
+        if (DateTime.Now > currentSubscription.EndDate)
+        {
+            return BadRequest(new { message = "Current subscription has expired" });
+        }
+
+        // Validate upgrade (can only upgrade to longer billing cycle)
+        var billingCycleOrder = new Dictionary<string, int>
+        {
+            { "Monthly", 1 },
+            { "Quarterly", 3 },
+            { "Yearly", 12 }
+        };
+
+        if (!billingCycleOrder.ContainsKey(dto.NewBillingCycle))
+        {
+            return BadRequest(new { message = "Invalid billing cycle" });
+        }
+
+        if (billingCycleOrder[dto.NewBillingCycle] <= billingCycleOrder[currentSubscription.BillingCycle])
+        {
+            return BadRequest(new { message = "Can only upgrade to a longer billing cycle" });
+        }
+
+        // Get pricing
+        var pricing = await _context.SystemPricings
+            .FirstOrDefaultAsync(p => p.PackageType == "SubscriptionPackage" && p.IsActive);
+
+        if (pricing == null || !pricing.SubscriptionMonthlyBase.HasValue)
+        {
+            return StatusCode(500, new { message = "Subscription pricing not configured" });
+        }
+
+        var monthlyPrice = pricing.SubscriptionMonthlyBase.Value;
+
+        // Calculate prorated credit from current subscription
+        var totalDaysInCurrentSubscription = (currentSubscription.EndDate - currentSubscription.StartDate).Days;
+        var daysRemaining = (currentSubscription.EndDate - DateTime.Now).Days;
+        var proratedCredit = 0m;
+
+        if (daysRemaining > 0 && totalDaysInCurrentSubscription > 0)
+        {
+            proratedCredit = (decimal)daysRemaining / totalDaysInCurrentSubscription * currentSubscription.TotalPaid;
+        }
+
+        // Calculate new subscription price
+        DateTime startDate = DateTime.Now;
+        DateTime endDate;
+        decimal totalPrice;
+
+        switch (dto.NewBillingCycle)
+        {
+            case "Monthly":
+                endDate = startDate.AddMonths(1);
+                totalPrice = monthlyPrice;
+                break;
+            case "Quarterly":
+                endDate = startDate.AddMonths(3);
+                totalPrice = monthlyPrice * 3 * 0.95M; // 5% discount
+                break;
+            case "Yearly":
+                endDate = startDate.AddYears(1);
+                totalPrice = monthlyPrice * 12 * 0.85M; // 15% discount
+                break;
+            default:
+                return BadRequest(new { message = "Invalid billing cycle" });
+        }
+
+        // Apply prorated credit
+        var finalPrice = Math.Max(0, totalPrice - proratedCredit);
+
+        // Cancel current subscription
+        currentSubscription.Status = "Cancelled";
+        currentSubscription.CancelledAt = DateTime.Now;
+        currentSubscription.AutoRenew = false;
+
+        // Cancel pending revenue shares from old subscription to prevent double payment
+        var oldPayment = await _context.Payments
+            .FirstOrDefaultAsync(p => p.PaymentType == "SubscriptionPackage"
+                && p.ReferenceId == currentSubscription.SubscriptionId
+                && p.Status == "Completed");
+
+        if (oldPayment != null)
+        {
+            var oldRevenueShares = await _context.RevenueShares
+                .Where(rs => rs.PaymentId == oldPayment.PaymentId && rs.PayoutStatus == "Pending")
+                .ToListAsync();
+
+            foreach (var rs in oldRevenueShares)
+            {
+                // Mark as cancelled instead of deleting to maintain audit trail
+                rs.PayoutStatus = "Cancelled";
+            }
+        }
+
+        // Create new upgraded subscription
+        var newSubscription = new SubscriptionPackagePurchase
+        {
+            ConsumerId = consumer.ConsumerId,
+            ProvinceId = currentSubscription.ProvinceId,
+            DistrictId = currentSubscription.DistrictId,
+            StartDate = startDate,
+            EndDate = endDate,
+            BillingCycle = dto.NewBillingCycle,
+            MonthlyPrice = monthlyPrice,
+            TotalPaid = finalPrice,
+            PurchaseDate = DateTime.Now,
+            Status = "Pending",
+            AutoRenew = false,
+            DashboardAccessCount = 0
+        };
+
+        _context.SubscriptionPackagePurchases.Add(newSubscription);
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = "Subscription upgraded successfully. Please proceed to payment.",
+            upgrade = new
+            {
+                oldSubscription = new
+                {
+                    subscriptionId = currentSubscription.SubscriptionId,
+                    billingCycle = currentSubscription.BillingCycle,
+                    daysRemaining,
+                    totalDaysInCurrentSubscription,
+                    originalPrice = currentSubscription.TotalPaid,
+                    proratedCredit = Math.Round(proratedCredit, 2)
+                },
+                newSubscription = new
+                {
+                    subscriptionId = newSubscription.SubscriptionId,
+                    billingCycle = newSubscription.BillingCycle,
+                    startDate,
+                    endDate,
+                    fullPrice = totalPrice,
+                    creditApplied = Math.Round(proratedCredit, 2),
+                    finalPrice = Math.Round(finalPrice, 2),
+                    status = newSubscription.Status
+                },
+                paymentInfo = new
+                {
+                    paymentType = "SubscriptionPackage",
+                    referenceId = newSubscription.SubscriptionId,
+                    amount = finalPrice
+                }
+            }
+        });
+    }
+
+    /// <summary>
     /// Cancel subscription
     /// </summary>
     [HttpPost("{subscriptionId}/cancel")]

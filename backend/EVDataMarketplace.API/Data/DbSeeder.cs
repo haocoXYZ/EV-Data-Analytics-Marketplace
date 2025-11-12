@@ -257,6 +257,7 @@ public static class DbSeeder
                 Role = "Moderator",
                 Status = "Active"
             },
+            // Provider 1: VinFast
             new User
             {
                 FullName = "VinFast Provider",
@@ -265,6 +266,43 @@ public static class DbSeeder
                 Role = "DataProvider",
                 Status = "Active"
             },
+            // Provider 2: EVN
+            new User
+            {
+                FullName = "EVN Charging Network",
+                Email = "evn@provider.com",
+                Password = BCrypt.Net.BCrypt.HashPassword("Test123!"),
+                Role = "DataProvider",
+                Status = "Active"
+            },
+            // Provider 3: Petrolimex
+            new User
+            {
+                FullName = "Petrolimex EV Stations",
+                Email = "petrolimex@provider.com",
+                Password = BCrypt.Net.BCrypt.HashPassword("Test123!"),
+                Role = "DataProvider",
+                Status = "Active"
+            },
+            // Provider 4: GreenEV
+            new User
+            {
+                FullName = "GreenEV Solutions",
+                Email = "greenev@provider.com",
+                Password = BCrypt.Net.BCrypt.HashPassword("Test123!"),
+                Role = "DataProvider",
+                Status = "Active"
+            },
+            // Provider 5: FastCharge
+            new User
+            {
+                FullName = "FastCharge Vietnam",
+                Email = "fastcharge@provider.com",
+                Password = BCrypt.Net.BCrypt.HashPassword("Test123!"),
+                Role = "DataProvider",
+                Status = "Active"
+            },
+            // Consumer
             new User
             {
                 FullName = "Consumer User",
@@ -278,20 +316,69 @@ public static class DbSeeder
         context.Users.AddRange(users);
         context.SaveChanges();
 
-        // Create DataProvider profile
-        var providerUser = context.Users.First(u => u.Email == "provider@test.com");
+        // Get provinces
         var hanoiProvince = context.Provinces.First(p => p.Name == "Hà Nội");
-        var provider = new DataProvider
+        var hcmcProvince = context.Provinces.First(p => p.Name == "Hồ Chí Minh");
+        var danangProvince = context.Provinces.First(p => p.Name == "Đà Nẵng");
+        var haiphongProvince = context.Provinces.First(p => p.Name == "Hải Phòng");
+        var canthoProvince = context.Provinces.First(p => p.Name == "Cần Thơ");
+
+        // Create DataProvider profiles
+        var providers = new List<DataProvider>
         {
-            UserId = providerUser.UserId,
-            CompanyName = "VinFast Charging Network",
-            CompanyWebsite = "https://vinfastauto.com",
-            ContactEmail = "provider@test.com",
-            ContactPhone = "+84123456789",
-            Address = "Vinhomes Ocean Park, Gia Lâm, Hà Nội",
-            ProvinceId = hanoiProvince.ProvinceId // Hà Nội
+            new DataProvider
+            {
+                UserId = context.Users.First(u => u.Email == "provider@test.com").UserId,
+                CompanyName = "VinFast Charging Network",
+                CompanyWebsite = "https://vinfastauto.com",
+                ContactEmail = "provider@test.com",
+                ContactPhone = "+84123456789",
+                Address = "Vinhomes Ocean Park, Gia Lâm, Hà Nội",
+                ProvinceId = hanoiProvince.ProvinceId
+            },
+            new DataProvider
+            {
+                UserId = context.Users.First(u => u.Email == "evn@provider.com").UserId,
+                CompanyName = "EVN Charging Solutions",
+                CompanyWebsite = "https://evn.com.vn",
+                ContactEmail = "evn@provider.com",
+                ContactPhone = "+84123456790",
+                Address = "18 Trần Nguyên Hãn, Hoàn Kiếm, Hà Nội",
+                ProvinceId = hanoiProvince.ProvinceId
+            },
+            new DataProvider
+            {
+                UserId = context.Users.First(u => u.Email == "petrolimex@provider.com").UserId,
+                CompanyName = "Petrolimex EV Charging",
+                CompanyWebsite = "https://petrolimex.com.vn",
+                ContactEmail = "petrolimex@provider.com",
+                ContactPhone = "+84123456791",
+                Address = "65 Trần Phú, Quận 5, TP.HCM",
+                ProvinceId = hcmcProvince.ProvinceId
+            },
+            new DataProvider
+            {
+                UserId = context.Users.First(u => u.Email == "greenev@provider.com").UserId,
+                CompanyName = "GreenEV Solutions",
+                CompanyWebsite = "https://greenev.vn",
+                ContactEmail = "greenev@provider.com",
+                ContactPhone = "+84123456792",
+                Address = "120 Nguyễn Văn Cừ, Hải Châu, Đà Nẵng",
+                ProvinceId = danangProvince.ProvinceId
+            },
+            new DataProvider
+            {
+                UserId = context.Users.First(u => u.Email == "fastcharge@provider.com").UserId,
+                CompanyName = "FastCharge Vietnam",
+                CompanyWebsite = "https://fastcharge.vn",
+                ContactEmail = "fastcharge@provider.com",
+                ContactPhone = "+84123456793",
+                Address = "88 Đinh Tiên Hoàng, Lê Chân, Hải Phòng",
+                ProvinceId = haiphongProvince.ProvinceId
+            }
         };
-        context.DataProviders.Add(provider);
+
+        context.DataProviders.AddRange(providers);
 
         // Create DataConsumer profile
         var consumerUser = context.Users.First(u => u.Email == "consumer@test.com");
@@ -310,30 +397,53 @@ public static class DbSeeder
 
     private static void SeedSampleDatasets(EVDataMarketplaceDbContext context)
     {
-        var provider = context.DataProviders.FirstOrDefault();
-        if (provider == null) return;
+        var providers = context.DataProviders.ToList();
+        if (!providers.Any()) return;
 
-        // Create 3 sample datasets
-        var datasets = new List<Dataset>
+        // Get province IDs
+        var hanoiId = context.Provinces.First(p => p.Name == "Hà Nội").ProvinceId;
+        var hcmcId = context.Provinces.First(p => p.Name == "Hồ Chí Minh").ProvinceId;
+        var danangId = context.Provinces.First(p => p.Name == "Đà Nẵng").ProvinceId;
+        var haiphongId = context.Provinces.First(p => p.Name == "Hải Phòng").ProvinceId;
+        var canthoId = context.Provinces.First(p => p.Name == "Cần Thơ").ProvinceId;
+
+        var datasets = new List<Dataset>();
+
+        // Provider 1: VinFast - Focus on Hanoi, HCMC, Danang
+        var vinfastProvider = providers[0];
+        datasets.AddRange(new[]
         {
             new Dataset
             {
-                ProviderId = provider.ProviderId,
-                Name = "Hà Nội EV Charging Data - Q1 2024",
-                Description = "Dữ liệu sạc xe điện tại các trạm VinFast ở Hà Nội trong quý 1 năm 2024. Bao gồm thông tin về năng lượng tiêu thụ, thời gian sạc, và chi phí.",
+                ProviderId = vinfastProvider.ProviderId,
+                Name = "Hà Nội EV Charging Data - Q1 2025",
+                Description = "Dữ liệu sạc xe điện tại các trạm VinFast ở Hà Nội trong quý 1 năm 2025. Bao gồm thông tin về năng lượng tiêu thụ, thời gian sạc, và chi phí.",
                 Category = "EV Charging",
                 DataFormat = "CSV",
                 ModerationStatus = "Approved",
                 Status = "Active",
                 Visibility = "Public",
                 UploadDate = DateTime.Now.AddDays(-30),
-                RowCount = 0 // Will be updated after adding records
+                RowCount = 0
             },
             new Dataset
             {
-                ProviderId = provider.ProviderId,
-                Name = "TP.HCM EV Charging Data - Q1 2024",
-                Description = "Dữ liệu sạc xe điện tại các trạm VinFast ở TP.HCM trong quý 1 năm 2024.",
+                ProviderId = vinfastProvider.ProviderId,
+                Name = "TP.HCM EV Charging Data - Q1 2025",
+                Description = "Dữ liệu sạc xe điện tại các trạm VinFast ở TP.HCM trong quý 1 năm 2025.",
+                Category = "EV Charging",
+                DataFormat = "CSV",
+                ModerationStatus = "Approved",
+                Status = "Active",
+                Visibility = "Public",
+                UploadDate = DateTime.Now.AddDays(-28),
+                RowCount = 0
+            },
+            new Dataset
+            {
+                ProviderId = vinfastProvider.ProviderId,
+                Name = "Đà Nẵng EV Charging Data - Q1 2025",
+                Description = "Dữ liệu sạc xe điện tại các trạm VinFast ở Đà Nẵng trong quý 1 năm 2025.",
                 Category = "EV Charging",
                 DataFormat = "CSV",
                 ModerationStatus = "Approved",
@@ -341,39 +451,198 @@ public static class DbSeeder
                 Visibility = "Public",
                 UploadDate = DateTime.Now.AddDays(-25),
                 RowCount = 0
-            },
-            new Dataset
-            {
-                ProviderId = provider.ProviderId,
-                Name = "Đà Nẵng EV Charging Data - Q1 2024",
-                Description = "Dữ liệu sạc xe điện tại các trạm VinFast ở Đà Nẵng trong quý 1 năm 2024.",
-                Category = "EV Charging",
-                DataFormat = "CSV",
-                ModerationStatus = "Approved",
-                Status = "Active",
-                Visibility = "Public",
-                UploadDate = DateTime.Now.AddDays(-20),
-                RowCount = 0
             }
-        };
+        });
+
+        // Provider 2: EVN - Focus on Hanoi, Haiphong
+        if (providers.Count > 1)
+        {
+            var evnProvider = providers[1];
+            datasets.AddRange(new[]
+            {
+                new Dataset
+                {
+                    ProviderId = evnProvider.ProviderId,
+                    Name = "Hà Nội Fast Charging Stations - 2025",
+                    Description = "Dữ liệu sạc nhanh của EVN tại Hà Nội năm 2025.",
+                    Category = "EV Charging",
+                    DataFormat = "CSV",
+                    ModerationStatus = "Approved",
+                    Status = "Active",
+                    Visibility = "Public",
+                    UploadDate = DateTime.Now.AddDays(-22),
+                    RowCount = 0
+                },
+                new Dataset
+                {
+                    ProviderId = evnProvider.ProviderId,
+                    Name = "Hải Phòng Charging Network - 2025",
+                    Description = "Mạng lưới trạm sạc EVN tại Hải Phòng.",
+                    Category = "EV Charging",
+                    DataFormat = "CSV",
+                    ModerationStatus = "Approved",
+                    Status = "Active",
+                    Visibility = "Public",
+                    UploadDate = DateTime.Now.AddDays(-20),
+                    RowCount = 0
+                }
+            });
+        }
+
+        // Provider 3: Petrolimex - Focus on HCMC, Cantho
+        if (providers.Count > 2)
+        {
+            var petrolimexProvider = providers[2];
+            datasets.AddRange(new[]
+            {
+                new Dataset
+                {
+                    ProviderId = petrolimexProvider.ProviderId,
+                    Name = "TP.HCM Petrol Station EV Charging - Q1 2025",
+                    Description = "Dữ liệu sạc xe điện tại các cây xăng Petrolimex ở TP.HCM.",
+                    Category = "EV Charging",
+                    DataFormat = "CSV",
+                    ModerationStatus = "Approved",
+                    Status = "Active",
+                    Visibility = "Public",
+                    UploadDate = DateTime.Now.AddDays(-18),
+                    RowCount = 0
+                },
+                new Dataset
+                {
+                    ProviderId = petrolimexProvider.ProviderId,
+                    Name = "Cần Thơ Charging Stations - 2025",
+                    Description = "Trạm sạc Petrolimex tại Cần Thơ và vùng lân cận.",
+                    Category = "EV Charging",
+                    DataFormat = "CSV",
+                    ModerationStatus = "Approved",
+                    Status = "Active",
+                    Visibility = "Public",
+                    UploadDate = DateTime.Now.AddDays(-15),
+                    RowCount = 0
+                }
+            });
+        }
+
+        // Provider 4: GreenEV - Focus on Danang
+        if (providers.Count > 3)
+        {
+            var greenevProvider = providers[3];
+            datasets.AddRange(new[]
+            {
+                new Dataset
+                {
+                    ProviderId = greenevProvider.ProviderId,
+                    Name = "Đà Nẵng Eco-Friendly Charging - 2025",
+                    Description = "Hệ thống trạm sạc thân thiện môi trường tại Đà Nẵng.",
+                    Category = "EV Charging",
+                    DataFormat = "CSV",
+                    ModerationStatus = "Approved",
+                    Status = "Active",
+                    Visibility = "Public",
+                    UploadDate = DateTime.Now.AddDays(-12),
+                    RowCount = 0
+                },
+                new Dataset
+                {
+                    ProviderId = greenevProvider.ProviderId,
+                    Name = "Hà Nội Green Charging Network - 2025",
+                    Description = "Mạng lưới sạc xanh tại Hà Nội.",
+                    Category = "EV Charging",
+                    DataFormat = "CSV",
+                    ModerationStatus = "Approved",
+                    Status = "Active",
+                    Visibility = "Public",
+                    UploadDate = DateTime.Now.AddDays(-10),
+                    RowCount = 0
+                }
+            });
+        }
+
+        // Provider 5: FastCharge - Focus on Haiphong, HCMC
+        if (providers.Count > 4)
+        {
+            var fastchargeProvider = providers[4];
+            datasets.AddRange(new[]
+            {
+                new Dataset
+                {
+                    ProviderId = fastchargeProvider.ProviderId,
+                    Name = "Hải Phòng Super Fast Charging - 2025",
+                    Description = "Trạm sạc siêu nhanh tại Hải Phòng.",
+                    Category = "EV Charging",
+                    DataFormat = "CSV",
+                    ModerationStatus = "Approved",
+                    Status = "Active",
+                    Visibility = "Public",
+                    UploadDate = DateTime.Now.AddDays(-8),
+                    RowCount = 0
+                },
+                new Dataset
+                {
+                    ProviderId = fastchargeProvider.ProviderId,
+                    Name = "TP.HCM Express Charging Hubs - 2025",
+                    Description = "Các điểm sạc nhanh tại TP.HCM.",
+                    Category = "EV Charging",
+                    DataFormat = "CSV",
+                    ModerationStatus = "Approved",
+                    Status = "Active",
+                    Visibility = "Public",
+                    UploadDate = DateTime.Now.AddDays(-5),
+                    RowCount = 0
+                }
+            });
+        }
 
         context.Datasets.AddRange(datasets);
         context.SaveChanges();
 
-        // Get province IDs
-        var hanoiId = context.Provinces.First(p => p.Name == "Hà Nội").ProvinceId;
-        var hcmcId = context.Provinces.First(p => p.Name == "Hồ Chí Minh").ProvinceId;
-        var danangId = context.Provinces.First(p => p.Name == "Đà Nẵng").ProvinceId;
-
         // Get district IDs
-        var hanoiDistricts = context.Districts.Where(d => d.ProvinceId == hanoiId).Take(4).Select(d => d.DistrictId).ToArray();
-        var hcmcDistricts = context.Districts.Where(d => d.ProvinceId == hcmcId).Take(4).Select(d => d.DistrictId).ToArray();
-        var danangDistricts = context.Districts.Where(d => d.ProvinceId == danangId).Take(3).Select(d => d.DistrictId).ToArray();
+        var hanoiDistricts = context.Districts.Where(d => d.ProvinceId == hanoiId).Take(5).Select(d => d.DistrictId).ToArray();
+        var hcmcDistricts = context.Districts.Where(d => d.ProvinceId == hcmcId).Take(5).Select(d => d.DistrictId).ToArray();
+        var danangDistricts = context.Districts.Where(d => d.ProvinceId == danangId).Take(4).Select(d => d.DistrictId).ToArray();
+        var haiphongDistricts = new[] { haiphongId }; // No districts for Hai Phong, use province only
+        var canthoDistricts = new[] { canthoId }; // No districts for Can Tho, use province only
 
-        // Add sample records for each dataset
-        SeedDatasetRecords(context, datasets[0].DatasetId, hanoiId, hanoiDistricts, 100); // Hanoi - 4 districts
-        SeedDatasetRecords(context, datasets[1].DatasetId, hcmcId, hcmcDistricts, 80); // HCMC - 4 districts
-        SeedDatasetRecords(context, datasets[2].DatasetId, danangId, danangDistricts, 60); // Danang - 3 districts
+        // Seed records for each dataset with varying amounts
+        var datasetList = datasets.ToList();
+        int datasetIndex = 0;
+
+        // VinFast datasets (3)
+        if (datasetList.Count > datasetIndex)
+        {
+            SeedDatasetRecords(context, datasetList[datasetIndex++].DatasetId, hanoiId, hanoiDistricts, 120);
+            SeedDatasetRecords(context, datasetList[datasetIndex++].DatasetId, hcmcId, hcmcDistricts, 150);
+            SeedDatasetRecords(context, datasetList[datasetIndex++].DatasetId, danangId, danangDistricts, 80);
+        }
+
+        // EVN datasets (2)
+        if (datasetList.Count > datasetIndex)
+        {
+            SeedDatasetRecords(context, datasetList[datasetIndex++].DatasetId, hanoiId, hanoiDistricts, 100);
+            SeedDatasetRecords(context, datasetList[datasetIndex++].DatasetId, haiphongId, haiphongDistricts, 60);
+        }
+
+        // Petrolimex datasets (2)
+        if (datasetList.Count > datasetIndex)
+        {
+            SeedDatasetRecords(context, datasetList[datasetIndex++].DatasetId, hcmcId, hcmcDistricts, 110);
+            SeedDatasetRecords(context, datasetList[datasetIndex++].DatasetId, canthoId, canthoDistricts, 50);
+        }
+
+        // GreenEV datasets (2)
+        if (datasetList.Count > datasetIndex)
+        {
+            SeedDatasetRecords(context, datasetList[datasetIndex++].DatasetId, danangId, danangDistricts, 70);
+            SeedDatasetRecords(context, datasetList[datasetIndex++].DatasetId, hanoiId, hanoiDistricts, 90);
+        }
+
+        // FastCharge datasets (2)
+        if (datasetList.Count > datasetIndex)
+        {
+            SeedDatasetRecords(context, datasetList[datasetIndex++].DatasetId, haiphongId, haiphongDistricts, 65);
+            SeedDatasetRecords(context, datasetList[datasetIndex++].DatasetId, hcmcId, hcmcDistricts, 130);
+        }
 
         // Update row counts
         foreach (var dataset in datasets)

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import ConsumerLayout from '../components/ConsumerLayout'
-import { purchasesApi } from '../api'
+import { purchasesApi, subscriptionsApi, paymentsApi } from '../api'
 import { DataPackagePurchase, SubscriptionPackagePurchase, APIPackagePurchase } from '../types'
 
 export default function MyPurchases() {
+  const navigate = useNavigate()
   const [dataPackages, setDataPackages] = useState<DataPackagePurchase[]>([])
   const [subscriptions, setSubscriptions] = useState<SubscriptionPackagePurchase[]>([])
   const [apiPackages, setApiPackages] = useState<APIPackagePurchase[]>([])
@@ -12,6 +13,14 @@ export default function MyPurchases() {
   const [activeTab, setActiveTab] = useState<'dataPackages' | 'subscriptions' | 'apiPackages'>('dataPackages')
   const [downloading, setDownloading] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [upgrading, setUpgrading] = useState<number | null>(null)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [upgradeTarget, setUpgradeTarget] = useState<{
+    subscriptionId: number;
+    currentCycle: string;
+    daysRemaining?: number;
+    totalPaid?: number;
+  } | null>(null)
 
   useEffect(() => {
     loadData()
@@ -68,6 +77,64 @@ export default function MyPurchases() {
     } catch (error: any) {
       alert('Cancel failed: ' + (error.response?.data?.message || error.message))
     }
+  }
+
+  const handleUpgradeClick = (subscriptionId: number, currentCycle: string) => {
+    // Find the subscription to show remaining days info
+    const subscription = subscriptions.find(s => s.subscriptionId === subscriptionId)
+    if (subscription) {
+      const daysRemaining = Math.max(0, Math.ceil((new Date(subscription.endDate!).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
+      setUpgradeTarget({ subscriptionId, currentCycle, daysRemaining, totalPaid: subscription.totalPaid })
+    } else {
+      setUpgradeTarget({ subscriptionId, currentCycle })
+    }
+    setShowUpgradeModal(true)
+  }
+
+  const handleUpgrade = async (newBillingCycle: 'Monthly' | 'Quarterly' | 'Yearly') => {
+    if (!upgradeTarget) return
+
+    setUpgrading(upgradeTarget.subscriptionId)
+    try {
+      const result = await subscriptionsApi.upgrade(upgradeTarget.subscriptionId, newBillingCycle)
+
+      // Create payment for the upgraded subscription
+      const paymentResult = await paymentsApi.create({
+        paymentType: 'SubscriptionPackage',
+        referenceId: result.upgrade.newSubscription.subscriptionId,
+      })
+
+      if (paymentResult.checkoutUrl) {
+        // Redirect to PayOS checkout
+        window.location.href = paymentResult.checkoutUrl
+      } else {
+        throw new Error('No checkout URL received')
+      }
+    } catch (error: any) {
+      alert('Upgrade failed: ' + (error.response?.data?.message || error.message))
+      setUpgrading(null)
+    } finally {
+      setShowUpgradeModal(false)
+      setUpgradeTarget(null)
+    }
+  }
+
+  const getUpgradeOptions = (currentCycle: string): Array<{ value: 'Monthly' | 'Quarterly' | 'Yearly'; label: string; discount: string }> => {
+    if (currentCycle === 'Monthly') {
+      return [
+        { value: 'Quarterly', label: '3 Months', discount: '5% discount' },
+        { value: 'Yearly', label: '12 Months', discount: '15% discount' }
+      ]
+    } else if (currentCycle === 'Quarterly') {
+      return [
+        { value: 'Yearly', label: '12 Months', discount: '15% discount' }
+      ]
+    }
+    return []
+  }
+
+  const canUpgrade = (billingCycle: string) => {
+    return billingCycle === 'Monthly' || billingCycle === 'Quarterly'
   }
 
   const getStatusBadge = (status: string) => {
@@ -240,7 +307,16 @@ export default function MyPurchases() {
                           <tr key={item.subscriptionId} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="py-3 px-4 font-mono text-sm">#{item.subscriptionId}</td>
                             <td className="py-3 px-4 text-gray-700">{item.provinceName}</td>
-                            <td className="py-3 px-4 text-gray-700">{item.billingCycle || 'N/A'}</td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <span className="text-gray-700">{item.billingCycle || 'N/A'}</span>
+                                {item.status === 'Active' && canUpgrade(item.billingCycle) && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">
+                                    ⬆️ Có thể nâng cấp
+                                  </span>
+                                )}
+                              </div>
+                            </td>
                             <td className="py-3 px-4 text-right font-semibold text-gray-900">{(item.monthlyPrice || 0).toLocaleString()} đ</td>
                             <td className="py-3 px-4 text-center">
                               <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusBadge(item.status)}`}>
@@ -248,7 +324,16 @@ export default function MyPurchases() {
                               </span>
                             </td>
                             <td className="py-3 px-4 text-sm text-gray-600">
-                              {item.endDate ? new Date(item.endDate).toLocaleDateString() : 'N/A'}
+                              {item.endDate ? (
+                                <div>
+                                  <div>{new Date(item.endDate).toLocaleDateString('vi-VN')}</div>
+                                  {item.status === 'Active' && (
+                                    <div className="text-xs text-blue-600 font-medium">
+                                      {Math.max(0, Math.ceil((new Date(item.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} ngày còn lại
+                                    </div>
+                                  )}
+                                </div>
+                              ) : 'N/A'}
                             </td>
                             <td className="py-3 px-4 text-center">
                               <div className="flex items-center justify-center gap-2">
@@ -257,24 +342,38 @@ export default function MyPurchases() {
                                     to={`/payments?subscriptionId=${item.subscriptionId}`}
                                     className="text-green-600 hover:text-green-700 font-medium text-sm"
                                   >
-                                    Complete Payment
+                                    💳 Thanh toán
                                   </Link>
                                 ) : (
                                   <Link
                                     to={`/subscriptions/${item.subscriptionId}/dashboard`}
                                     className="text-blue-600 hover:text-blue-700 font-medium text-sm"
                                   >
-                                    View Dashboard
+                                    📊 Xem Dashboard
                                   </Link>
                                 )}
                                 {item.status === 'Active' && (
                                   <>
+                                    {canUpgrade(item.billingCycle) && (
+                                      <>
+                                        <span className="text-gray-300">|</span>
+                                        <button
+                                          onClick={() => handleUpgradeClick(item.subscriptionId, item.billingCycle)}
+                                          className="text-blue-600 hover:text-blue-700 font-medium text-sm flex items-center gap-1"
+                                        >
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 11l5-5m0 0l5 5m-5-5v12" />
+                                          </svg>
+                                          Nâng cấp
+                                        </button>
+                                      </>
+                                    )}
                                     <span className="text-gray-300">|</span>
                                     <button
                                       onClick={() => handleCancelSubscription(item.subscriptionId)}
                                       className="text-red-600 hover:text-red-700 font-medium text-sm"
                                     >
-                                      Cancel
+                                      ❌ Hủy
                                     </button>
                                   </>
                                 )}
@@ -398,6 +497,108 @@ export default function MyPurchases() {
           </div>
         </div>
       </div>
+
+      {/* Upgrade Modal */}
+      {showUpgradeModal && upgradeTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-2xl font-bold text-gray-900">Nâng Cấp Gói</h3>
+              <button
+                onClick={() => {
+                  setShowUpgradeModal(false)
+                  setUpgradeTarget(null)
+                }}
+                disabled={upgrading !== null}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <p className="text-gray-600 mb-4">
+              Chọn chu kỳ thanh toán dài hơn và nhận hoàn tiền theo tỷ lệ cho thời gian còn lại.
+            </p>
+
+            {/* Current Subscription Info */}
+            {upgradeTarget.daysRemaining !== undefined && upgradeTarget.totalPaid !== undefined && (
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 mb-6 border border-blue-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                  </svg>
+                  <h4 className="font-bold text-blue-900">Gói Hiện Tại</h4>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <div className="text-blue-600 font-medium">Chu kỳ</div>
+                    <div className="text-blue-900 font-bold">{upgradeTarget.currentCycle}</div>
+                  </div>
+                  <div>
+                    <div className="text-blue-600 font-medium">Còn lại</div>
+                    <div className="text-blue-900 font-bold">{upgradeTarget.daysRemaining} ngày</div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-blue-600 font-medium">Giá đã trả</div>
+                    <div className="text-blue-900 font-bold">{upgradeTarget.totalPaid.toLocaleString()} ₫</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Upgrade Options */}
+            <div className="space-y-3 mb-6">
+              <h4 className="font-semibold text-gray-900 text-sm">Chọn gói mới:</h4>
+              {getUpgradeOptions(upgradeTarget.currentCycle).map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => handleUpgrade(option.value)}
+                  disabled={upgrading !== null}
+                  className="w-full p-4 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-gray-900">{option.label}</div>
+                      <div className="text-sm text-green-600 font-medium">💰 Giảm giá {option.discount}</div>
+                    </div>
+                    <div className="text-blue-600">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Info Box */}
+            <div className="bg-green-50 rounded-lg p-4 mb-4 border border-green-200">
+              <div className="flex items-start gap-2 text-sm text-green-800">
+                <svg className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                <div>
+                  <strong>Cách tính hoàn tiền:</strong> Số tiền hoàn = (Số ngày còn lại / Tổng số ngày) × Giá đã trả.
+                  Số tiền này sẽ được trừ vào giá gói mới.
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowUpgradeModal(false)
+                setUpgradeTarget(null)
+              }}
+              disabled={upgrading !== null}
+              className="w-full bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Hủy
+            </button>
+          </div>
+        </div>
+      )}
     </ConsumerLayout>
   )
 }

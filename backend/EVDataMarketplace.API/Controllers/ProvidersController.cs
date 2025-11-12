@@ -363,10 +363,10 @@ public class ProvidersController : ControllerBase
             return NotFound(new { message = "Provider profile not found" });
         }
 
-        // Get all revenue shares
+        // Get all revenue shares (exclude cancelled ones from subscription upgrades)
         var revenueShares = await _context.RevenueShares
             .Include(rs => rs.Payment)
-            .Where(rs => rs.ProviderId == provider.ProviderId)
+            .Where(rs => rs.ProviderId == provider.ProviderId && rs.PayoutStatus != "Cancelled")
             .OrderByDescending(rs => rs.CalculatedDate)
             .Select(rs => new
             {
@@ -441,9 +441,11 @@ public class ProvidersController : ControllerBase
 
         var targetYear = year ?? DateTime.Now.Year;
 
+        // Exclude cancelled revenue shares from subscription upgrades
         var monthlyBreakdown = await _context.RevenueShares
             .Where(rs => rs.ProviderId == provider.ProviderId
-                && rs.CalculatedDate.Year == targetYear)
+                && rs.CalculatedDate.Year == targetYear
+                && rs.PayoutStatus != "Cancelled")
             .GroupBy(rs => new { rs.CalculatedDate.Year, rs.CalculatedDate.Month })
             .Select(g => new
             {
@@ -489,9 +491,10 @@ public class ProvidersController : ControllerBase
             return NotFound(new { message = "Provider profile not found" });
         }
 
+        // Exclude cancelled revenue shares from subscription upgrades
         var earningsByType = await _context.RevenueShares
             .Include(rs => rs.Payment)
-            .Where(rs => rs.ProviderId == provider.ProviderId)
+            .Where(rs => rs.ProviderId == provider.ProviderId && rs.PayoutStatus != "Cancelled")
             .GroupBy(rs => rs.Payment!.PaymentType)
             .Select(g => new
             {

@@ -119,4 +119,16 @@ export const subscriptionsApi = {
       value: point.recordCount
     }))
   },
+
+  /**
+   * POST /api/subscription-packages/upgrade
+   * Upgrade subscription to a higher billing cycle with prorated credit
+   */
+  upgrade: async (currentSubscriptionId: number, newBillingCycle: 'Monthly' | 'Quarterly' | 'Yearly') => {
+    const response = await client.post('/subscription-packages/upgrade', {
+      currentSubscriptionId,
+      newBillingCycle
+    })
+    return response.data
+  },
 }

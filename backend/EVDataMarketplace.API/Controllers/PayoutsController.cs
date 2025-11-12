@@ -241,7 +241,6 @@ public class PayoutsController : ControllerBase
     }
 
     // GET: api/payouts/provider/{providerId} - Provider xem payouts cua minh
-    [AllowAnonymous]
     [Authorize(Roles = "DataProvider,Admin")]
     [HttpGet("provider/{providerId}")]
     public async Task<ActionResult<IEnumerable<object>>> GetProviderPayouts(int providerId)
@@ -262,6 +261,216 @@ public class PayoutsController : ControllerBase
             .ToListAsync();
 
         return Ok(payouts);
+    }
+
+    // GET: api/payouts/package-sales - Thống kê chi tiết packages đã bán
+    [HttpGet("package-sales")]
+    public async Task<ActionResult<object>> GetPackageSalesStats([FromQuery] string? monthYear = null)
+    {
+        // Get revenue shares to link packages to providers
+        var revenueShares = await _context.RevenueShares
+            .Include(rs => rs.DataProvider)
+                .ThenInclude(dp => dp!.User)
+            .Include(rs => rs.Payment)
+            .ToListAsync();
+
+        // Get data package purchases with payments
+        var dataPackagePurchases = await _context.DataPackagePurchases
+            .Include(p => p.Province)
+            .Include(p => p.District)
+            .Where(p => p.Status == "Active")
+            .ToListAsync();
+
+        // Get subscription packages
+        var subscriptionPackages = await _context.SubscriptionPackagePurchases
+            .Include(p => p.Province)
+            .Where(p => p.Status == "Active")
+            .ToListAsync();
+
+        // Get API packages
+        var apiPackages = await _context.APIPackagePurchases
+            .Where(p => p.Status == "Active")
+            .ToListAsync();
+
+        // Get payments to link purchases to revenue shares
+        var payments = await _context.Payments
+            .Where(p => p.Status == "Completed")
+            .ToListAsync();
+
+        // Filter by month if provided
+        if (!string.IsNullOrEmpty(monthYear))
+        {
+            var year = int.Parse(monthYear.Split('-')[0]);
+            var month = int.Parse(monthYear.Split('-')[1]);
+
+            dataPackagePurchases = dataPackagePurchases.Where(p => p.PurchaseDate.Year == year && p.PurchaseDate.Month == month).ToList();
+            subscriptionPackages = subscriptionPackages.Where(p => p.PurchaseDate.Year == year && p.PurchaseDate.Month == month).ToList();
+            apiPackages = apiPackages.Where(p => p.PurchaseDate.Year == year && p.PurchaseDate.Month == month).ToList();
+            revenueShares = revenueShares.Where(rs => rs.CalculatedDate.Year == year && rs.CalculatedDate.Month == month).ToList();
+        }
+
+        // Group by provider with payment information
+        var providerSales = revenueShares
+            .Where(rs => rs.Payment != null)
+            .GroupBy(rs => new { rs.ProviderId, rs.DataProvider!.CompanyName, rs.DataProvider.User.Email })
+            .Select(g => new
+            {
+                providerId = g.Key.ProviderId,
+                providerName = g.Key.CompanyName,
+                email = g.Key.Email,
+                totalRevenue = g.Sum(rs => rs.ProviderShare),
+                packages = new
+                {
+                    dataPackages = g.Count(rs => rs.Payment!.PaymentType == "DataPackage"),
+                    subscriptions = g.Count(rs => rs.Payment!.PaymentType == "SubscriptionPackage"),
+                    apiPackages = g.Count(rs => rs.Payment!.PaymentType == "APIPackage")
+                }
+            })
+            .ToList();
+
+        return Ok(new
+        {
+            // Overall summary
+            dataPackages = new
+            {
+                count = dataPackagePurchases.Count,
+                totalRevenue = dataPackagePurchases.Sum(p => p.TotalPrice)
+            },
+            subscriptionPackages = new
+            {
+                count = subscriptionPackages.Count,
+                totalRevenue = subscriptionPackages.Sum(p => p.TotalPaid)
+            },
+            apiPackages = new
+            {
+                count = apiPackages.Count,
+                totalRevenue = apiPackages.Sum(p => p.TotalPaid)
+            },
+            summary = new
+            {
+                totalPackages = dataPackagePurchases.Count + subscriptionPackages.Count + apiPackages.Count,
+                totalRevenue = dataPackagePurchases.Sum(p => p.TotalPrice) +
+                              subscriptionPackages.Sum(p => p.TotalPaid) +
+                              apiPackages.Sum(p => p.TotalPaid)
+            },
+            // Breakdown by provider
+            providerSales = providerSales
+        });
+    }
+
+    // GET: api/payouts/provider-packages/{providerId} - Chi tiết packages của provider
+    [HttpGet("provider-packages/{providerId}")]
+    public async Task<ActionResult<object>> GetProviderPackageDetails(int providerId, [FromQuery] string? monthYear = null)
+    {
+        // Get all revenue shares for this provider
+        var revenueShares = await _context.RevenueShares
+            .Include(rs => rs.Payment)
+                .ThenInclude(p => p!.DataConsumer)
+                    .ThenInclude(dc => dc!.User)
+            .Where(rs => rs.ProviderId == providerId)
+            .ToListAsync();
+
+        if (!string.IsNullOrEmpty(monthYear))
+        {
+            var year = int.Parse(monthYear.Split('-')[0]);
+            var month = int.Parse(monthYear.Split('-')[1]);
+            revenueShares = revenueShares.Where(rs => rs.CalculatedDate.Year == year && rs.CalculatedDate.Month == month).ToList();
+        }
+
+        // Group by payment and get package details
+        var packageDetails = new List<object>();
+
+        foreach (var rs in revenueShares.Where(rs => rs.Payment != null))
+        {
+            var payment = rs.Payment!;
+            object? packageInfo = null;
+
+            if (payment.PaymentType == "DataPackage" && payment.ReferenceId.HasValue)
+            {
+                var pkg = await _context.DataPackagePurchases
+                    .Include(p => p.Province)
+                    .Include(p => p.District)
+                    .Include(p => p.DataConsumer)
+                        .ThenInclude(dc => dc!.User)
+                    .FirstOrDefaultAsync(p => p.PurchaseId == payment.ReferenceId.Value);
+
+                if (pkg != null)
+                {
+                    packageInfo = new
+                    {
+                        packageType = "Data Package",
+                        packageId = pkg.PurchaseId,
+                        consumerName = pkg.DataConsumer?.User?.Email ?? "N/A",
+                        location = $"{pkg.Province?.Name ?? "N/A"} - {pkg.District?.Name ?? "Toàn tỉnh"}",
+                        dateRange = $"{pkg.StartDate:dd/MM/yyyy} - {pkg.EndDate:dd/MM/yyyy}",
+                        totalPrice = pkg.TotalPrice,
+                        providerShare = rs.ProviderShare,
+                        purchaseDate = pkg.PurchaseDate,
+                        status = pkg.Status
+                    };
+                }
+            }
+            else if (payment.PaymentType == "SubscriptionPackage" && payment.ReferenceId.HasValue)
+            {
+                var pkg = await _context.SubscriptionPackagePurchases
+                    .Include(p => p.Province)
+                    .Include(p => p.DataConsumer)
+                        .ThenInclude(dc => dc!.User)
+                    .FirstOrDefaultAsync(p => p.SubscriptionId == payment.ReferenceId.Value);
+
+                if (pkg != null)
+                {
+                    packageInfo = new
+                    {
+                        packageType = "Subscription",
+                        packageId = pkg.SubscriptionId,
+                        consumerName = pkg.DataConsumer?.User?.Email ?? "N/A",
+                        location = pkg.Province?.Name ?? "N/A",
+                        dateRange = $"{pkg.StartDate:dd/MM/yyyy} - {pkg.EndDate:dd/MM/yyyy}",
+                        totalPrice = pkg.TotalPaid,
+                        providerShare = rs.ProviderShare,
+                        purchaseDate = pkg.PurchaseDate,
+                        status = pkg.Status
+                    };
+                }
+            }
+            else if (payment.PaymentType == "APIPackage" && payment.ReferenceId.HasValue)
+            {
+                var pkg = await _context.APIPackagePurchases
+                    .Include(p => p.DataConsumer)
+                        .ThenInclude(dc => dc!.User)
+                    .FirstOrDefaultAsync(p => p.ApiPurchaseId == payment.ReferenceId.Value);
+
+                if (pkg != null)
+                {
+                    packageInfo = new
+                    {
+                        packageType = "API Package",
+                        packageId = pkg.ApiPurchaseId,
+                        consumerName = pkg.DataConsumer?.User?.Email ?? "N/A",
+                        location = "Toàn quốc",
+                        dateRange = $"{pkg.ApiCallsUsed}/{pkg.ApiCallsPurchased} calls",
+                        totalPrice = pkg.TotalPaid,
+                        providerShare = rs.ProviderShare,
+                        purchaseDate = pkg.PurchaseDate,
+                        status = pkg.Status
+                    };
+                }
+            }
+
+            if (packageInfo != null)
+            {
+                packageDetails.Add(packageInfo);
+            }
+        }
+
+        return Ok(new
+        {
+            providerId = providerId,
+            totalPackages = packageDetails.Count,
+            totalRevenue = revenueShares.Sum(rs => rs.ProviderShare),
+            packages = packageDetails.OrderByDescending(p => ((dynamic)p).purchaseDate).ToList()
+        });
     }
 }
 
