@@ -20,7 +20,8 @@ export default function ProviderLayout({ children }: ProviderLayoutProps) {
   const menuItems = [
     { path: '/provider/dashboard', label: 'Dashboard', icon: '📊', description: 'Tổng quan datasets & earnings' },
     { path: '/provider/new', label: 'Upload Dataset', icon: '📤', description: 'Tải lên dataset mới' },
-    { path: '/provider/pricing', label: 'Xem Pricing', icon: '💰', description: 'Giá các gói dữ liệu' },
+    { path: '/provider/earnings', label: 'Thu nhập', icon: '💰', description: 'Xem thu nhập & payouts' },
+    { path: '/provider/pricing', label: 'Xem Pricing', icon: '💵', description: 'Giá các gói dữ liệu' },
   ]
 
   return (

@@ -14,7 +14,8 @@
       "Bash(powershell.exe -Command \"Get-Process -Name ''EVDataMarketplace.API'' -ErrorAction SilentlyContinue | Stop-Process -Force\")",
       "Bash(git add:*)",
       "Bash(curl:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(npm run dev:*)"
     ],
     "deny": [],
     "ask": []

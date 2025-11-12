@@ -91,3 +91,42 @@ public class DatasetModerationDto
     public string ModerationStatus { get; set; } = string.Empty; // Approved, Rejected
     public string? Comments { get; set; }
 }
+
+// Provider DTOs
+public class CreateProviderDto
+{
+    public string FullName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+    public string CompanyName { get; set; } = string.Empty;
+    public string? CompanyWebsite { get; set; }
+    public string? ContactPhone { get; set; }
+    public string? Address { get; set; }
+    public int? ProvinceId { get; set; }
+}
+
+public class UpdateProviderDto
+{
+    public string? CompanyName { get; set; }
+    public string? CompanyWebsite { get; set; }
+    public string? ContactPhone { get; set; }
+    public string? Address { get; set; }
+    public int? ProvinceId { get; set; }
+}
+
+public class ProviderDto
+{
+    public int ProviderId { get; set; }
+    public int UserId { get; set; }
+    public string FullName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string CompanyName { get; set; } = string.Empty;
+    public string? CompanyWebsite { get; set; }
+    public string? ContactEmail { get; set; }
+    public string? ContactPhone { get; set; }
+    public string? Address { get; set; }
+    public int? ProvinceId { get; set; }
+    public string? ProvinceName { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public string Status { get; set; } = string.Empty;
+}

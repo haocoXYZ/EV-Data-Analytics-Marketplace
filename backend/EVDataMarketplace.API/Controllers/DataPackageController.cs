@@ -79,12 +79,19 @@ public class DataPackageController : ControllerBase
         {
             return Ok(new
             {
-                rowCount = 0,
+                provinceId,
+                provinceName = province.Name,
+                districtId,
+                districtName = district?.Name,
+                totalRecords = 0,
+                dateRange = new
+                {
+                    startDate = startDate ?? DateTime.MinValue,
+                    endDate = endDate ?? DateTime.MaxValue
+                },
                 pricePerRow = 0m,
                 totalPrice = 0m,
-                sampleData = new List<object>(),
-                provinceName = province.Name,
-                districtName = district?.Name,
+                sampleRecords = new List<object>(),
                 message = "No data available for selected filters"
             });
         }
@@ -116,12 +123,19 @@ public class DataPackageController : ControllerBase
 
         return Ok(new
         {
-            rowCount,
+            provinceId,
+            provinceName = province.Name,
+            districtId,
+            districtName = district?.Name,
+            totalRecords = rowCount,
+            dateRange = new
+            {
+                startDate = startDate ?? DateTime.MinValue,
+                endDate = endDate ?? DateTime.MaxValue
+            },
             pricePerRow = pricing.PricePerRow,
             totalPrice,
-            sampleData,
-            provinceName = province.Name,
-            districtName = district?.Name
+            sampleRecords = sampleData
         });
     }
 

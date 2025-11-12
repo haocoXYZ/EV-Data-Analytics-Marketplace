@@ -378,13 +378,15 @@ export interface Province {
   provinceId: number
   name: string
   code: string
+  // Frontend-only fields for map visualization
+  coordinates?: { x: number; y: number }
 }
 
 export interface District {
   districtId: number
   provinceId: number
   name: string
-  code: string
+  code?: string
 }
 
 // ============= COMMON TYPES =============

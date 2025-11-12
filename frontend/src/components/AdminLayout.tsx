@@ -20,6 +20,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   // Menu cho Admin - full access
   const adminMenuItems = [
     { path: '/admin/dashboard', label: 'Dashboard', icon: '📊', description: 'Tổng quan hệ thống' },
+    { path: '/admin/providers', label: 'Providers', icon: '👥', description: 'Quản lý Data Providers' },
     { path: '/admin/pricing', label: 'Quản lý giá', icon: '💰', description: 'Pricing: Data/Subscription/API Packages' },
     { path: '/admin/moderation', label: 'Kiểm duyệt', icon: '✅', description: 'Duyệt datasets từ Provider' },
     { path: '/admin/payouts', label: 'Thanh toán', icon: '💸', description: 'Revenue & Payouts cho Provider' },

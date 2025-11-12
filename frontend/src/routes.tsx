@@ -14,7 +14,9 @@ import ProviderNew from './pages/ProviderNew'
 import ModeratorReview from './pages/ModeratorReview'
 import AdminPayouts from './pages/AdminPayouts'
 import AdminDashboard from './pages/AdminDashboard'
+import AdminProviders from './pages/AdminProviders'
 import ProviderDashboard from './pages/ProviderDashboard'
+import ProviderEarnings from './pages/ProviderEarnings'
 import Login from './pages/Login'
 
 const routes: RouteObject[] = [
@@ -30,13 +32,14 @@ const routes: RouteObject[] = [
     { path: '/subscriptions/:subscriptionId/dashboard', element: <SubscriptionDashboard /> },
     { path: '/api-packages/:purchaseId/keys', element: <APIPackageKeys /> },
     { path: '/admin/dashboard', element: <AdminDashboard /> },
+    { path: '/admin/providers', element: <AdminProviders /> },
     { path: '/admin/pricing', element: <AdminPricing /> },
     { path: '/admin/payouts', element: <AdminPayouts /> },
     { path: '/admin/moderation', element: <ModeratorReview /> },
     { path: '/provider/dashboard', element: <ProviderDashboard /> },
     { path: '/provider/new', element: <ProviderNew /> },
     { path: '/provider/datasets', element: <div className="p-8"><h1 className="text-2xl font-bold">My Datasets</h1></div> },
-    { path: '/provider/earnings', element: <div className="p-8"><h1 className="text-2xl font-bold">Earnings</h1></div> },
+    { path: '/provider/earnings', element: <ProviderEarnings /> },
 ]
 
 export default routes
