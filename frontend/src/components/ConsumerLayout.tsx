@@ -18,7 +18,6 @@ export default function ConsumerLayout({ children }: ConsumerLayoutProps) {
   
   const navItems = [
     { path: '/', label: 'Trang chủ' },
-    { path: '/catalog', label: 'Khám phá dữ liệu' },
     { path: '/my-purchases', label: 'Dữ liệu đã mua' },
   ]
   
@@ -114,10 +113,10 @@ export default function ConsumerLayout({ children }: ConsumerLayoutProps) {
             <div>
               <h3 className="font-bold mb-4">Liên kết nhanh</h3>
               <ul className="space-y-2 text-blue-200">
-                <li><Link to="/catalog" className="hover:text-white transition-colors">Khám phá dữ liệu</Link></li>
-                <li><Link to="/about" className="hover:text-white transition-colors">Về chúng tôi</Link></li>
-                <li><Link to="/pricing" className="hover:text-white transition-colors">Bảng giá</Link></li>
-                <li><Link to="/contact" className="hover:text-white transition-colors">Liên hệ</Link></li>
+                <li><Link to="/buy-data" className="hover:text-white transition-colors">Mua dữ liệu</Link></li>
+                <li><Link to="/buy-subscription" className="hover:text-white transition-colors">Đăng ký Dashboard</Link></li>
+                <li><Link to="/buy-api" className="hover:text-white transition-colors">Mua gói API</Link></li>
+                <li><Link to="/my-purchases" className="hover:text-white transition-colors">Dữ liệu đã mua</Link></li>
               </ul>
             </div>
 

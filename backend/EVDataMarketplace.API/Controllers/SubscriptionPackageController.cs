@@ -60,6 +60,64 @@ public class SubscriptionPackageController : ControllerBase
             }
         }
 
+        // Check for existing active subscriptions in the same province/district
+        var existingActiveSubscription = await _context.SubscriptionPackagePurchases
+            .Where(s => s.ConsumerId == consumer.ConsumerId)
+            .Where(s => s.ProvinceId == dto.ProvinceId)
+            .Where(s => (!dto.DistrictId.HasValue && !s.DistrictId.HasValue) ||
+                       (dto.DistrictId.HasValue && s.DistrictId == dto.DistrictId.Value))
+            .Where(s => s.Status == "Active")
+            .Where(s => s.EndDate > DateTime.Now)
+            .OrderByDescending(s => s.EndDate)
+            .FirstOrDefaultAsync();
+
+        if (existingActiveSubscription != null)
+        {
+            // Define billing cycle hierarchy: Monthly < Quarterly < Yearly
+            var billingCycleOrder = new Dictionary<string, int>
+            {
+                { "Monthly", 1 },
+                { "Quarterly", 3 },
+                { "Yearly", 12 }
+            };
+
+            var currentCycleValue = billingCycleOrder.GetValueOrDefault(existingActiveSubscription.BillingCycle, 0);
+            var newCycleValue = billingCycleOrder.GetValueOrDefault(dto.BillingCycle, 0);
+
+            // Prevent downgrade
+            if (newCycleValue < currentCycleValue)
+            {
+                return BadRequest(new
+                {
+                    message = $"Không thể hạ cấp từ gói {existingActiveSubscription.BillingCycle} xuống {dto.BillingCycle}. Vui lòng sử dụng chức năng Nâng cấp hoặc đợi gói hiện tại hết hạn.",
+                    currentSubscription = new
+                    {
+                        subscriptionId = existingActiveSubscription.SubscriptionId,
+                        billingCycle = existingActiveSubscription.BillingCycle,
+                        endDate = existingActiveSubscription.EndDate,
+                        daysRemaining = (existingActiveSubscription.EndDate - DateTime.Now).Days
+                    }
+                });
+            }
+
+            // If same level or upgrade, suggest using upgrade feature instead
+            if (newCycleValue >= currentCycleValue)
+            {
+                return BadRequest(new
+                {
+                    message = $"Bạn đã có gói {existingActiveSubscription.BillingCycle} đang hoạt động. Vui lòng sử dụng chức năng 'Nâng cấp' để được hưởng ưu đãi từ gói hiện tại.",
+                    currentSubscription = new
+                    {
+                        subscriptionId = existingActiveSubscription.SubscriptionId,
+                        billingCycle = existingActiveSubscription.BillingCycle,
+                        endDate = existingActiveSubscription.EndDate,
+                        daysRemaining = (existingActiveSubscription.EndDate - DateTime.Now).Days
+                    },
+                    upgradeAvailable = newCycleValue > currentCycleValue
+                });
+            }
+        }
+
         // Get pricing
         var pricing = await _context.SystemPricings
             .FirstOrDefaultAsync(p => p.PackageType == "SubscriptionPackage" && p.IsActive);
@@ -137,7 +195,7 @@ public class SubscriptionPackageController : ControllerBase
     /// Get dashboard analytics for active subscription
     /// </summary>
     [HttpGet("{subscriptionId}/dashboard")]
-    public async Task<IActionResult> GetDashboard(int subscriptionId)
+    public async Task<IActionResult> GetDashboard(int subscriptionId, [FromQuery] int? days = null)
     {
         var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
         if (string.IsNullOrEmpty(userEmail))
@@ -191,34 +249,59 @@ public class SubscriptionPackageController : ControllerBase
             query = query.Where(r => r.DistrictId == subscription.DistrictId.Value);
         }
 
-        // Get last 30 days of data
-        var thirtyDaysAgo = DateTime.Now.AddDays(-30);
-        query = query.Where(r => r.ChargingTimestamp >= thirtyDaysAgo);
+        // Apply date filter if specified, otherwise get all available data
+        DateTime? filterStartDate = null;
+        int actualDaysRange = 0;
+
+        if (days.HasValue && days.Value > 0)
+        {
+            filterStartDate = DateTime.Now.AddDays(-days.Value);
+            query = query.Where(r => r.ChargingTimestamp >= filterStartDate.Value);
+            actualDaysRange = days.Value;
+        }
 
         var allRecords = await query.ToListAsync();
+
+        // Calculate actual date range from data
+        if (allRecords.Any())
+        {
+            var minDate = allRecords.Min(r => r.ChargingTimestamp);
+            var maxDate = allRecords.Max(r => r.ChargingTimestamp);
+            actualDaysRange = (int)(maxDate - minDate).TotalDays + 1;
+        }
 
         // Calculate statistics
         var totalRecords = allRecords.Count;
         var totalEnergy = allRecords.Sum(r => r.EnergyKwh);
-        var avgDuration = totalRecords > 0 && allRecords.Any(r => r.DurationMinutes.HasValue)
-            ? allRecords.Where(r => r.DurationMinutes.HasValue).Average(r => r.DurationMinutes!.Value)
-            : 0;
+        var avgEnergy = totalRecords > 0 ? allRecords.Average(r => r.EnergyKwh) : 0;
+        var avgDuration = totalRecords > 0 ? allRecords.Where(r => r.DurationMinutes.HasValue).Average(r => r.DurationMinutes!.Value) : 0;
         var uniqueStations = allRecords.Select(r => r.StationId).Distinct().Count();
 
         return Ok(new
         {
-            subscriptionId = subscription.SubscriptionId,
-            provinceName = subscription.Province?.Name ?? "Unknown",
-            districtName = subscription.District?.Name,
-            dateRange = new
+            subscription = new
             {
+                subscriptionId = subscription.SubscriptionId,
+                provinceName = subscription.Province?.Name ?? "Unknown",
+                districtName = subscription.District?.Name,
                 startDate = subscription.StartDate,
-                endDate = subscription.EndDate
+                endDate = subscription.EndDate,
+                daysRemaining = (subscription.EndDate - DateTime.Now).Days
             },
-            totalStations = uniqueStations,
-            totalEnergyKwh = Math.Round(totalEnergy, 2),
-            averageChargingDuration = Math.Round(avgDuration, 1),
-            totalChargingSessions = totalRecords
+            statistics = new
+            {
+                totalRecords,
+                totalEnergyKwh = Math.Round(totalEnergy, 2),
+                averageEnergyKwh = Math.Round(avgEnergy, 2),
+                averageChargingDuration = Math.Round(avgDuration, 2),
+                uniqueStations,
+                dataRangeDays = actualDaysRange,
+                dataDateRange = allRecords.Any() ? new
+                {
+                    from = allRecords.Min(r => r.ChargingTimestamp),
+                    to = allRecords.Max(r => r.ChargingTimestamp)
+                } : null
+            }
         });
     }
 
@@ -226,7 +309,7 @@ public class SubscriptionPackageController : ControllerBase
     /// Get energy consumption over time chart data
     /// </summary>
     [HttpGet("{subscriptionId}/charts/energy-over-time")]
-    public async Task<IActionResult> GetEnergyOverTimeChart(int subscriptionId, [FromQuery] int days = 30)
+    public async Task<IActionResult> GetEnergyOverTimeChart(int subscriptionId, [FromQuery] int? days = null)
     {
         var subscription = await ValidateSubscriptionAccess(subscriptionId);
         if (subscription == null)
@@ -234,14 +317,20 @@ public class SubscriptionPackageController : ControllerBase
             return BadRequest(new { message = "Invalid subscription or access denied" });
         }
 
-        var startDate = DateTime.Now.AddDays(-days);
-
-        var data = await _context.DatasetRecords
+        var query = _context.DatasetRecords
             .Include(r => r.Dataset)
             .Where(r => r.ProvinceId == subscription.ProvinceId)
             .Where(r => r.Dataset!.ModerationStatus == "Approved")
-            .Where(r => r.ChargingTimestamp >= startDate)
-            .Where(r => !subscription.DistrictId.HasValue || r.DistrictId == subscription.DistrictId.Value)
+            .Where(r => !subscription.DistrictId.HasValue || r.DistrictId == subscription.DistrictId.Value);
+
+        // Apply date filter only if days parameter is provided
+        if (days.HasValue && days.Value > 0)
+        {
+            var startDate = DateTime.Now.AddDays(-days.Value);
+            query = query.Where(r => r.ChargingTimestamp >= startDate);
+        }
+
+        var data = await query
             .GroupBy(r => r.ChargingTimestamp.Date)
             .Select(g => new
             {
@@ -252,21 +341,20 @@ public class SubscriptionPackageController : ControllerBase
             .OrderBy(g => g.date)
             .ToListAsync();
 
-        // Convert to frontend format {label, value}
-        var chartData = data.Select(d => new
+        return Ok(new
         {
-            label = d.date.ToString("MMM dd"),
-            value = Math.Round(d.totalEnergy, 2)
-        }).ToList();
-
-        return Ok(chartData);
+            chartType = "Energy Over Time",
+            dataPoints = data,
+            daysFilter = days,
+            totalDataPoints = data.Count
+        });
     }
 
     /// <summary>
-    /// Get station distribution chart data (by district)
+    /// Get station distribution by district chart data
     /// </summary>
     [HttpGet("{subscriptionId}/charts/station-distribution")]
-    public async Task<IActionResult> GetStationDistributionChart(int subscriptionId)
+    public async Task<IActionResult> GetStationDistributionChart(int subscriptionId, [FromQuery] int? days = null)
     {
         var subscription = await ValidateSubscriptionAccess(subscriptionId);
         if (subscription == null)
@@ -274,36 +362,50 @@ public class SubscriptionPackageController : ControllerBase
             return BadRequest(new { message = "Invalid subscription or access denied" });
         }
 
-        var thirtyDaysAgo = DateTime.Now.AddDays(-30);
-
-        var data = await _context.DatasetRecords
+        var query = _context.DatasetRecords
             .Include(r => r.Dataset)
             .Include(r => r.District)
             .Where(r => r.ProvinceId == subscription.ProvinceId)
             .Where(r => r.Dataset!.ModerationStatus == "Approved")
-            .Where(r => r.ChargingTimestamp >= thirtyDaysAgo)
-            .Where(r => !subscription.DistrictId.HasValue || r.DistrictId == subscription.DistrictId.Value)
-            .ToListAsync();
+            .Where(r => !subscription.DistrictId.HasValue || r.DistrictId == subscription.DistrictId.Value);
 
-        // Group by district and count unique stations
-        var districtData = data
-            .GroupBy(r => new { r.DistrictId, DistrictName = r.District != null ? r.District.Name : "Unknown" })
+        // Apply date filter only if days parameter is provided
+        if (days.HasValue && days.Value > 0)
+        {
+            var startDate = DateTime.Now.AddDays(-days.Value);
+            query = query.Where(r => r.ChargingTimestamp >= startDate);
+        }
+
+        // Load all records into memory first to access navigation properties
+        var allRecords = await query.ToListAsync();
+
+        var data = allRecords
+            .GroupBy(r => new { r.DistrictId, DistrictName = r.District?.Name ?? "Chưa phân loại" })
             .Select(g => new
             {
-                label = g.Key.DistrictName,
-                value = g.Select(r => r.StationId).Distinct().Count()
+                districtId = g.Key.DistrictId,
+                districtName = g.Key.DistrictName,
+                totalEnergy = g.Sum(r => r.EnergyKwh),
+                stationCount = g.Select(r => r.StationId).Distinct().Count(),
+                recordCount = g.Count()
             })
-            .OrderByDescending(d => d.value)
+            .OrderByDescending(g => g.totalEnergy)
             .ToList();
 
-        return Ok(districtData);
+        return Ok(new
+        {
+            chartType = "Station Distribution by District",
+            dataPoints = data,
+            daysFilter = days,
+            totalDistricts = data.Count
+        });
     }
 
     /// <summary>
     /// Get peak hours analysis
     /// </summary>
     [HttpGet("{subscriptionId}/charts/peak-hours")]
-    public async Task<IActionResult> GetPeakHoursChart(int subscriptionId)
+    public async Task<IActionResult> GetPeakHoursChart(int subscriptionId, [FromQuery] int? days = null)
     {
         var subscription = await ValidateSubscriptionAccess(subscriptionId);
         if (subscription == null)
@@ -311,39 +413,226 @@ public class SubscriptionPackageController : ControllerBase
             return BadRequest(new { message = "Invalid subscription or access denied" });
         }
 
-        var thirtyDaysAgo = DateTime.Now.AddDays(-30);
-
-        var data = await _context.DatasetRecords
+        var query = _context.DatasetRecords
             .Include(r => r.Dataset)
             .Where(r => r.ProvinceId == subscription.ProvinceId)
             .Where(r => r.Dataset!.ModerationStatus == "Approved")
-            .Where(r => r.ChargingTimestamp >= thirtyDaysAgo)
-            .Where(r => !subscription.DistrictId.HasValue || r.DistrictId == subscription.DistrictId.Value)
-            .ToListAsync();
+            .Where(r => !subscription.DistrictId.HasValue || r.DistrictId == subscription.DistrictId.Value);
+
+        // Apply date filter only if days parameter is provided
+        if (days.HasValue && days.Value > 0)
+        {
+            var startDate = DateTime.Now.AddDays(-days.Value);
+            query = query.Where(r => r.ChargingTimestamp >= startDate);
+        }
+
+        var data = await query.ToListAsync();
 
         var hourlyData = data
             .GroupBy(r => r.ChargingTimestamp.Hour)
             .Select(g => new
             {
                 hour = g.Key,
-                sessions = g.Count()
+                totalEnergy = Math.Round(g.Sum(r => r.EnergyKwh), 2),
+                recordCount = g.Count(),
+                avgEnergy = Math.Round(g.Average(r => r.EnergyKwh), 2)
             })
             .OrderBy(g => g.hour)
             .ToList();
 
-        // Convert to frontend format {label, value} - ensure all 24 hours are present
-        var chartData = Enumerable.Range(0, 24)
-            .Select(hour => {
-                var hourData = hourlyData.FirstOrDefault(h => h.hour == hour);
-                return new
-                {
-                    label = $"{hour:D2}:00",
-                    value = hourData?.sessions ?? 0
-                };
-            })
-            .ToList();
+        return Ok(new
+        {
+            chartType = "Peak Hours Analysis",
+            dataPoints = hourlyData,
+            daysFilter = days,
+            totalRecords = data.Count
+        });
+    }
 
-        return Ok(chartData);
+    /// <summary>
+    /// Upgrade subscription to a higher billing cycle with prorated credit
+    /// </summary>
+    [HttpPost("upgrade")]
+    public async Task<IActionResult> UpgradeSubscription([FromBody] UpgradeSubscriptionDto dto)
+    {
+        var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+        if (string.IsNullOrEmpty(userEmail))
+        {
+            return Unauthorized(new { message = "User email not found" });
+        }
+
+        var consumer = await _context.DataConsumers
+            .Include(c => c.User)
+            .FirstOrDefaultAsync(c => c.User.Email == userEmail);
+
+        if (consumer == null)
+        {
+            return NotFound(new { message = "Consumer profile not found" });
+        }
+
+        // Get current subscription
+        var currentSubscription = await _context.SubscriptionPackagePurchases
+            .Include(s => s.Province)
+            .Include(s => s.District)
+            .FirstOrDefaultAsync(s => s.SubscriptionId == dto.CurrentSubscriptionId && s.ConsumerId == consumer.ConsumerId);
+
+        if (currentSubscription == null)
+        {
+            return NotFound(new { message = "Current subscription not found" });
+        }
+
+        if (currentSubscription.Status != "Active")
+        {
+            return BadRequest(new { message = $"Cannot upgrade subscription with status: {currentSubscription.Status}" });
+        }
+
+        if (DateTime.Now > currentSubscription.EndDate)
+        {
+            return BadRequest(new { message = "Current subscription has expired" });
+        }
+
+        // Validate upgrade (can only upgrade to longer billing cycle)
+        var billingCycleOrder = new Dictionary<string, int>
+        {
+            { "Monthly", 1 },
+            { "Quarterly", 3 },
+            { "Yearly", 12 }
+        };
+
+        if (!billingCycleOrder.ContainsKey(dto.NewBillingCycle))
+        {
+            return BadRequest(new { message = "Invalid billing cycle" });
+        }
+
+        if (billingCycleOrder[dto.NewBillingCycle] <= billingCycleOrder[currentSubscription.BillingCycle])
+        {
+            return BadRequest(new { message = "Can only upgrade to a longer billing cycle" });
+        }
+
+        // Get pricing
+        var pricing = await _context.SystemPricings
+            .FirstOrDefaultAsync(p => p.PackageType == "SubscriptionPackage" && p.IsActive);
+
+        if (pricing == null || !pricing.SubscriptionMonthlyBase.HasValue)
+        {
+            return StatusCode(500, new { message = "Subscription pricing not configured" });
+        }
+
+        var monthlyPrice = pricing.SubscriptionMonthlyBase.Value;
+
+        // Calculate prorated credit from current subscription
+        var totalDaysInCurrentSubscription = (currentSubscription.EndDate - currentSubscription.StartDate).Days;
+        var daysRemaining = (currentSubscription.EndDate - DateTime.Now).Days;
+        var proratedCredit = 0m;
+
+        if (daysRemaining > 0 && totalDaysInCurrentSubscription > 0)
+        {
+            proratedCredit = (decimal)daysRemaining / totalDaysInCurrentSubscription * currentSubscription.TotalPaid;
+        }
+
+        // Calculate new subscription price
+        DateTime startDate = DateTime.Now;
+        DateTime endDate;
+        decimal totalPrice;
+
+        switch (dto.NewBillingCycle)
+        {
+            case "Monthly":
+                endDate = startDate.AddMonths(1);
+                totalPrice = monthlyPrice;
+                break;
+            case "Quarterly":
+                endDate = startDate.AddMonths(3);
+                totalPrice = monthlyPrice * 3 * 0.95M; // 5% discount
+                break;
+            case "Yearly":
+                endDate = startDate.AddYears(1);
+                totalPrice = monthlyPrice * 12 * 0.85M; // 15% discount
+                break;
+            default:
+                return BadRequest(new { message = "Invalid billing cycle" });
+        }
+
+        // Apply prorated credit
+        var finalPrice = Math.Max(0, totalPrice - proratedCredit);
+
+        // Cancel current subscription
+        currentSubscription.Status = "Cancelled";
+        currentSubscription.CancelledAt = DateTime.Now;
+        currentSubscription.AutoRenew = false;
+
+        // Cancel pending revenue shares from old subscription to prevent double payment
+        var oldPayment = await _context.Payments
+            .FirstOrDefaultAsync(p => p.PaymentType == "SubscriptionPackage"
+                && p.ReferenceId == currentSubscription.SubscriptionId
+                && p.Status == "Completed");
+
+        if (oldPayment != null)
+        {
+            var oldRevenueShares = await _context.RevenueShares
+                .Where(rs => rs.PaymentId == oldPayment.PaymentId && rs.PayoutStatus == "Pending")
+                .ToListAsync();
+
+            foreach (var rs in oldRevenueShares)
+            {
+                // Mark as cancelled instead of deleting to maintain audit trail
+                rs.PayoutStatus = "Cancelled";
+            }
+        }
+
+        // Create new upgraded subscription
+        var newSubscription = new SubscriptionPackagePurchase
+        {
+            ConsumerId = consumer.ConsumerId,
+            ProvinceId = currentSubscription.ProvinceId,
+            DistrictId = currentSubscription.DistrictId,
+            StartDate = startDate,
+            EndDate = endDate,
+            BillingCycle = dto.NewBillingCycle,
+            MonthlyPrice = monthlyPrice,
+            TotalPaid = finalPrice,
+            PurchaseDate = DateTime.Now,
+            Status = "Pending",
+            AutoRenew = false,
+            DashboardAccessCount = 0
+        };
+
+        _context.SubscriptionPackagePurchases.Add(newSubscription);
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = "Subscription upgraded successfully. Please proceed to payment.",
+            upgrade = new
+            {
+                oldSubscription = new
+                {
+                    subscriptionId = currentSubscription.SubscriptionId,
+                    billingCycle = currentSubscription.BillingCycle,
+                    daysRemaining,
+                    totalDaysInCurrentSubscription,
+                    originalPrice = currentSubscription.TotalPaid,
+                    proratedCredit = Math.Round(proratedCredit, 2)
+                },
+                newSubscription = new
+                {
+                    subscriptionId = newSubscription.SubscriptionId,
+                    billingCycle = newSubscription.BillingCycle,
+                    startDate,
+                    endDate,
+                    fullPrice = totalPrice,
+                    creditApplied = Math.Round(proratedCredit, 2),
+                    finalPrice = Math.Round(finalPrice, 2),
+                    status = newSubscription.Status
+                },
+                paymentInfo = new
+                {
+                    paymentType = "SubscriptionPackage",
+                    referenceId = newSubscription.SubscriptionId,
+                    amount = finalPrice
+                }
+            }
+        });
     }
 
     /// <summary>

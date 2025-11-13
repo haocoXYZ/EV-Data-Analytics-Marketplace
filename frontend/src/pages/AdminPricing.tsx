@@ -77,9 +77,34 @@ export default function AdminPricing() {
       return
     }
 
+    // Remove null/undefined/NaN/zero fields before sending
+    const cleanedData: any = {}
+
+    // Only include price fields if they are valid numbers AND greater than 0
+    // This prevents sending 0 values which fail backend validation [Range(0.01, ...)]
+    if (data.pricePerRow && !isNaN(data.pricePerRow) && data.pricePerRow > 0) {
+      cleanedData.pricePerRow = data.pricePerRow
+    }
+    if (data.subscriptionMonthlyBase && !isNaN(data.subscriptionMonthlyBase) && data.subscriptionMonthlyBase > 0) {
+      cleanedData.subscriptionMonthlyBase = data.subscriptionMonthlyBase
+    }
+    if (data.apiPricePerCall && !isNaN(data.apiPricePerCall) && data.apiPricePerCall > 0) {
+      cleanedData.apiPricePerCall = data.apiPricePerCall
+    }
+
+    // Always include commission percentages (they must be valid)
+    if (!isNaN(data.providerCommissionPercent)) {
+      cleanedData.providerCommissionPercent = data.providerCommissionPercent
+    }
+    if (!isNaN(data.adminCommissionPercent)) {
+      cleanedData.adminCommissionPercent = data.adminCommissionPercent
+    }
+
+    console.log('🔍 Sending pricing update:', JSON.stringify(cleanedData, null, 2))
+
     try {
       setSaving(id)
-      await pricingApi.update(id, data)
+      await pricingApi.update(id, cleanedData)
       alert('✅ Cập nhật pricing thành công!')
       await loadPricing()
       setEditingId(null)
@@ -100,11 +125,13 @@ export default function AdminPricing() {
   }
 
   const updateFormField = (id: number, field: string, value: number) => {
+    // Don't set NaN values - keep them undefined instead
+    const validValue = isNaN(value) ? undefined : value
     setFormData({
       ...formData,
       [id]: {
         ...formData[id],
-        [field]: value
+        [field]: validValue
       }
     })
   }

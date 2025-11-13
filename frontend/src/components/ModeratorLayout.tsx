@@ -19,8 +19,7 @@ export default function ModeratorLayout({ children }: ModeratorLayoutProps) {
 
   // Moderator chỉ có quyền kiểm duyệt
   const menuItems = [
-    { path: '/moderation/review', label: 'B3: Kiểm duyệt', icon: '✅' },
-    { path: '/catalog', label: 'Xem Datasets', icon: '📁' },
+    { path: '/moderator/review', label: 'Kiểm duyệt', icon: '✅', description: 'Duyệt datasets từ Provider' },
   ]
 
   return (
@@ -56,14 +55,20 @@ export default function ModeratorLayout({ children }: ModeratorLayoutProps) {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center space-x-3 px-4 py-3 transition-colors ${
+                title={item.description}
+                className={`flex items-center px-4 py-3 transition-all ${
                   location.pathname === item.path
-                    ? 'bg-blue-600 text-white'
-                    : 'text-blue-100 hover:bg-blue-600/50'
+                    ? 'bg-blue-600 text-white shadow-lg'
+                    : 'text-blue-100 hover:bg-blue-600/50 hover:text-white'
                 }`}
               >
-                <span className="text-xl">{item.icon}</span>
-                {sidebarOpen && <span className="font-medium">{item.label}</span>}
+                <span className="text-2xl">{item.icon}</span>
+                {sidebarOpen && (
+                  <div className="ml-3">
+                    <div className="font-medium">{item.label}</div>
+                    <div className="text-xs text-blue-300 opacity-75">{item.description}</div>
+                  </div>
+                )}
               </Link>
             ))}
           </nav>

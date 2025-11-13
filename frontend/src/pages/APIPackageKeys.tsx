@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import ConsumerLayout from '../components/ConsumerLayout'
-import { apiKeysApi, purchasesApi } from '../api'
-import { APIKey, APIPackagePurchase } from '../types'
+import { apiKeysApi, purchasesApi, locationsApi } from '../api'
+import { APIKey, APIPackagePurchase, Province, District } from '../types'
 
 export default function APIPackageKeys() {
     const { purchaseId } = useParams<{ purchaseId: string }>()
@@ -17,9 +17,11 @@ export default function APIPackageKeys() {
 
     // API Testing states
     const [selectedApiKey, setSelectedApiKey] = useState<string>('')
+    const [provinces, setProvinces] = useState<Province[]>([])
+    const [districts, setDistricts] = useState<District[]>([])
     const [testParams, setTestParams] = useState({
-        provinceId: '',
-        districtId: '',
+        provinceId: null as number | null,
+        districtId: null as number | null,
         startDate: '',
         endDate: ''
     })
@@ -31,7 +33,17 @@ export default function APIPackageKeys() {
         if (purchaseId) {
             loadPackageData(parseInt(purchaseId))
         }
+        loadProvinces()
     }, [purchaseId])
+
+    useEffect(() => {
+        if (testParams.provinceId) {
+            loadDistricts(testParams.provinceId)
+        } else {
+            setDistricts([])
+            setTestParams(prev => ({ ...prev, districtId: null }))
+        }
+    }, [testParams.provinceId])
 
     const loadPackageData = async (id: number) => {
         setLoading(true)
@@ -53,6 +65,24 @@ export default function APIPackageKeys() {
             setError(err.response?.data?.message || err.message || 'Failed to load API package')
         } finally {
             setLoading(false)
+        }
+    }
+
+    const loadProvinces = async () => {
+        try {
+            const data = await locationsApi.getProvinces()
+            setProvinces(data)
+        } catch (err) {
+            console.error('Failed to load provinces:', err)
+        }
+    }
+
+    const loadDistricts = async (provinceId: number) => {
+        try {
+            const data = await locationsApi.getDistricts(provinceId)
+            setDistricts(data)
+        } catch (err) {
+            console.error('Failed to load districts:', err)
         }
     }
 
@@ -110,14 +140,26 @@ export default function APIPackageKeys() {
 
         try {
             const params: any = {}
-            if (testParams.provinceId) params.provinceId = parseInt(testParams.provinceId)
-            if (testParams.districtId) params.districtId = parseInt(testParams.districtId)
+
+            // Use province/district NAMES instead of IDs
+            if (testParams.provinceId) {
+                const province = provinces.find(p => p.provinceId === testParams.provinceId)
+                if (province) {
+                    params.province = province.name
+                }
+            }
+            if (testParams.districtId) {
+                const district = districts.find(d => d.districtId === testParams.districtId)
+                if (district) {
+                    params.district = district.name
+                }
+            }
             if (testParams.startDate) params.startDate = testParams.startDate
             if (testParams.endDate) params.endDate = testParams.endDate
 
             const result = await apiKeysApi.getData(selectedApiKey, params)
             setTestResult(result)
-            
+
             // Reload package data to update usage stats
             if (purchaseId) {
                 loadPackageData(parseInt(purchaseId))
@@ -402,28 +444,68 @@ export default function APIPackageKeys() {
                         {/* Query Parameters */}
                         <div className="mb-6">
                             <label className="block text-sm font-semibold text-gray-700 mb-3">
-                                2. Enter Query Parameters (Optional)
+                                2. Select Query Parameters (Optional)
                             </label>
+                            <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-4 mb-4 border border-green-200">
+                                <p className="font-semibold mb-2 text-green-900 flex items-center gap-2">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    ✨ Auto-convert to province/district names!
+                                </p>
+                                <p className="text-sm text-green-800 mb-2">
+                                    Select from dropdowns and we'll automatically send province/district <strong>NAMES</strong> to the API (not IDs).
+                                    Example: <code className="bg-green-100 px-2 py-0.5 rounded text-green-900">?province=Hà Nội&district=Ba Đình</code>
+                                </p>
+                                {!testParams.provinceId && (
+                                    <div className="bg-yellow-50 border border-yellow-300 rounded p-2 mt-2">
+                                        <p className="text-xs text-yellow-800 flex items-center gap-1">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                            </svg>
+                                            <strong>No filters selected</strong> - Will return ALL data from database (may be slow)
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs text-gray-600 mb-1">Province ID</label>
-                                    <input
-                                        type="number"
-                                        value={testParams.provinceId}
-                                        onChange={(e) => setTestParams({ ...testParams, provinceId: e.target.value })}
-                                        placeholder="e.g., 1"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    />
+                                    <label className="block text-xs font-semibold text-gray-700 mb-2">
+                                        📍 Province / Tỉnh
+                                    </label>
+                                    <select
+                                        value={testParams.provinceId || ''}
+                                        onChange={(e) => setTestParams({ ...testParams, provinceId: e.target.value ? parseInt(e.target.value) : null, districtId: null })}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                    >
+                                        <option value="">-- Select Province (Optional) --</option>
+                                        {provinces.map(p => (
+                                            <option key={p.provinceId} value={p.provinceId}>
+                                                {p.name}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs text-gray-600 mb-1">District ID</label>
-                                    <input
-                                        type="number"
-                                        value={testParams.districtId}
-                                        onChange={(e) => setTestParams({ ...testParams, districtId: e.target.value })}
-                                        placeholder="e.g., 1"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    />
+                                    <label className="block text-xs font-semibold text-gray-700 mb-2">
+                                        🏘️ District / Quận Huyện
+                                    </label>
+                                    <select
+                                        value={testParams.districtId || ''}
+                                        onChange={(e) => setTestParams({ ...testParams, districtId: e.target.value ? parseInt(e.target.value) : null })}
+                                        disabled={!testParams.provinceId}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                    >
+                                        <option value="">-- All Districts (Optional) --</option>
+                                        {districts.map(d => (
+                                            <option key={d.districtId} value={d.districtId}>
+                                                {d.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {!testParams.provinceId && (
+                                        <p className="text-xs text-gray-500 mt-1">Select a province first</p>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-xs text-gray-600 mb-1">Start Date</label>
@@ -508,10 +590,12 @@ export default function APIPackageKeys() {
                                         {JSON.stringify(testResult, null, 2)}
                                     </pre>
                                 </div>
-                                {testResult.data && Array.isArray(testResult.data) && (
-                                    <p className="text-sm text-gray-600 mt-2">
-                                        ✅ Returned <strong>{testResult.data.length}</strong> record(s)
-                                    </p>
+                                {testResult.records && Array.isArray(testResult.records) && (
+                                    <div className="text-sm text-gray-600 mt-2 space-y-1">
+                                        <p>✅ Returned <strong>{testResult.records.length}</strong> record(s) out of <strong>{testResult.totalRecords}</strong> total</p>
+                                        <p>📄 Page <strong>{testResult.currentPage}</strong> of <strong>{testResult.totalPages}</strong></p>
+                                        <p>🔄 Remaining API calls: <strong className="text-orange-600">{testResult.remainingCalls}</strong></p>
+                                    </div>
                                 )}
                             </div>
                         )}
@@ -525,19 +609,36 @@ export default function APIPackageKeys() {
                             </svg>
                             Example API Usage (cURL)
                         </h3>
-                        <div className="bg-black bg-opacity-50 rounded-lg p-4 overflow-x-auto">
-                            <pre className="text-sm text-green-400 font-mono">
-                                {`curl -X GET "${window.location.origin.replace(/:\d+/, ':5258')}/api/data" \\
-  -H "X-API-Key: YOUR_API_KEY_HERE" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "provinceId": 1,
-    "districtId": 1,
-    "startDate": "2025-01-01",
-    "endDate": "2025-01-31"
-  }'`}
-                            </pre>
+
+                        {/* Method 1: Using Names (Recommended) */}
+                        <div className="mb-6">
+                            <p className="text-green-400 font-semibold mb-2">✨ Method 1: Using Province/District Names (Recommended)</p>
+                            <div className="bg-black bg-opacity-50 rounded-lg p-4 overflow-x-auto">
+                                <pre className="text-sm text-green-400 font-mono">
+                                    {`curl -H "X-API-Key: YOUR_API_KEY_HERE" \\
+  "${window.location.origin.replace(/:\d+/, ':5258')}/api/data?province=Ha Noi&district=Ba Dinh&startDate=2025-01-01&endDate=2025-01-31"`}
+                                </pre>
+                            </div>
                         </div>
+
+                        {/* Method 2: Using IDs (Old Way) */}
+                        <div>
+                            <p className="text-yellow-400 font-semibold mb-2">📋 Method 2: Using IDs (Still Supported)</p>
+                            <div className="bg-black bg-opacity-50 rounded-lg p-4 overflow-x-auto">
+                                <pre className="text-sm text-yellow-400 font-mono">
+                                    {`curl -H "X-API-Key: YOUR_API_KEY_HERE" \\
+  "${window.location.origin.replace(/:\d+/, ':5258')}/api/data?provinceId=1&districtId=1&startDate=2025-01-01&endDate=2025-01-31"`}
+                                </pre>
+                            </div>
+                        </div>
+
+                        <div className="bg-blue-900 bg-opacity-50 rounded-lg p-3 mt-4">
+                            <p className="text-blue-200 text-sm">
+                                💡 <strong>Pro tip:</strong> Names are case-insensitive and diacritic-optional!<br/>
+                                <code className="text-green-300">"Ha Noi"</code> = <code className="text-green-300">"Hà Nội"</code> = <code className="text-green-300">"HÀ NỘI"</code>
+                            </p>
+                        </div>
+
                         <p className="text-gray-300 text-sm mt-4">
                             Replace <code className="bg-gray-700 px-2 py-1 rounded">YOUR_API_KEY_HERE</code> with your actual API key from the table above.
                         </p>

@@ -17,13 +17,24 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     navigate('/login')
   }
 
-  const menuItems = [
-    { path: '/admin/dashboard', label: 'Dashboard', icon: '📊' },
-    { path: '/admin/pricing', label: 'B1: Pricing Tiers', icon: '💰' },
-    { path: '/moderation/review', label: 'B3: Kiểm duyệt', icon: '✅' },
-    { path: '/admin/payouts', label: 'B7: Payouts', icon: '💸' },
-    { path: '/catalog', label: 'Xem Datasets', icon: '📁' },
+  // Menu cho Admin - full access
+  const adminMenuItems = [
+    { path: '/admin/dashboard', label: 'Dashboard', icon: '📊', description: 'Tổng quan hệ thống' },
+    { path: '/admin/providers', label: 'Providers', icon: '👥', description: 'Quản lý Data Providers' },
+    { path: '/admin/pricing', label: 'Quản lý giá', icon: '💰', description: 'Pricing: Data/Subscription/API Packages' },
+    { path: '/admin/moderation', label: 'Kiểm duyệt', icon: '✅', description: 'Duyệt datasets từ Provider' },
+    { path: '/admin/payouts', label: 'Thanh toán', icon: '💸', description: 'Revenue & Payouts cho Provider' },
   ]
+
+  // Menu cho Moderator - chỉ kiểm duyệt
+  const moderatorMenuItems = [
+    { path: '/admin/moderation', label: 'Kiểm duyệt', icon: '✅', description: 'Duyệt datasets từ Provider' },
+  ]
+
+  // Chọn menu dựa trên role
+  const menuItems = user?.role === 'Moderator' ? moderatorMenuItems : adminMenuItems
+  const panelTitle = user?.role === 'Moderator' ? 'Moderator Panel' : 'Admin Panel'
+  const panelIcon = user?.role === 'Moderator' ? '🔍' : '👑'
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -34,10 +45,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           <div className="h-16 flex items-center justify-between px-4 border-b border-indigo-800">
             {sidebarOpen ? (
               <>
-                <Link to="/admin/dashboard" className="flex items-center space-x-2">
-                  <span className="text-2xl">👑</span>
+                <Link to={user?.role === 'Moderator' ? '/admin/moderation' : '/admin/dashboard'} className="flex items-center space-x-2">
+                  <span className="text-2xl">{panelIcon}</span>
                   <div>
-                    <div className="font-bold">Admin Panel</div>
+                    <div className="font-bold">{panelTitle}</div>
                     <div className="text-xs text-indigo-300">EV Data</div>
                   </div>
                 </Link>
@@ -58,14 +69,20 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center px-4 py-3 transition-all ${
+                title={item.description}
+                className={`flex items-center px-4 py-3 transition-all group relative ${
                   location.pathname === item.path
                     ? 'bg-white/20 border-r-4 border-yellow-400 text-white shadow-lg'
                     : 'text-indigo-200 hover:bg-white/10 hover:text-white'
                 }`}
               >
                 <span className="text-2xl">{item.icon}</span>
-                {sidebarOpen && <span className="ml-3 font-medium">{item.label}</span>}
+                {sidebarOpen && (
+                  <div className="ml-3">
+                    <div className="font-medium">{item.label}</div>
+                    <div className="text-xs text-indigo-300 opacity-75">{item.description}</div>
+                  </div>
+                )}
               </Link>
             ))}
           </nav>
@@ -104,10 +121,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         {/* Top Bar */}
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shadow-sm">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">👑</span>
+            <span className="text-2xl">{panelIcon}</span>
             <div>
-              <h1 className="text-xl font-bold text-gray-800">Admin Portal</h1>
-              <div className="text-xs text-gray-500">Quản lý nền tảng EV Data</div>
+              <h1 className="text-xl font-bold text-gray-800">{panelTitle}</h1>
+              <div className="text-xs text-gray-500">{user?.role === 'Moderator' ? 'Kiểm duyệt datasets' : 'Quản lý nền tảng EV Data'}</div>
             </div>
           </div>
           <div className="flex items-center space-x-4">

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ConsumerLayout from '../components/ConsumerLayout'
-import { purchasesApi, paymentsApi } from '../api'
+import { purchasesApi, paymentsApi, pricingApi } from '../api'
 
 // Hardcoded provinces and districts per TESTING_GUIDE
 const PROVINCES = [
@@ -49,9 +49,6 @@ const DISTRICTS: Record<number, { id: number; name: string }[]> = {
 
 type BillingCycle = 'Monthly' | 'Quarterly' | 'Yearly'
 
-// Base monthly price (example - will be fetched from pricing API in production)
-const MONTHLY_PRICE = 500000 // 500,000 VND
-
 const BILLING_CYCLES = [
   {
     value: 'Monthly' as BillingCycle,
@@ -81,27 +78,50 @@ export default function SubscriptionPurchase() {
   const [provinceId, setProvinceId] = useState<number>(1)
   const [districtId, setDistrictId] = useState<number | undefined>()
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('Monthly')
-  
+
+  const [monthlyPrice, setMonthlyPrice] = useState<number>(500000) // Default 500,000 VND
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [purchasing, setPurchasing] = useState(false)
 
+  useEffect(() => {
+    loadPricing()
+  }, [])
+
+  const loadPricing = async () => {
+    try {
+      setLoading(true)
+      const pricingConfigs = await pricingApi.getAll()
+      // Find SubscriptionPackage pricing (packageType = "SubscriptionPackage")
+      const subscriptionPricing = pricingConfigs.find((p: any) => p.packageType === 'SubscriptionPackage')
+      if (subscriptionPricing && subscriptionPricing.subscriptionMonthlyBase) {
+        setMonthlyPrice(subscriptionPricing.subscriptionMonthlyBase)
+      }
+    } catch (err) {
+      console.error('Failed to load pricing:', err)
+      // Keep default price if API fails
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const calculatePrice = () => {
     const cycle = BILLING_CYCLES.find(c => c.value === billingCycle)
-    if (!cycle) return { monthly: MONTHLY_PRICE, total: MONTHLY_PRICE }
+    if (!cycle) return { monthly: monthlyPrice, total: monthlyPrice, months: 1, discount: 0 }
 
-    let total = MONTHLY_PRICE
+    let total = monthlyPrice
     let months = 1
 
     if (billingCycle === 'Quarterly') {
       months = 3
-      total = MONTHLY_PRICE * 3 * 0.95 // 5% discount
+      total = monthlyPrice * 3 * 0.95 // 5% discount
     } else if (billingCycle === 'Yearly') {
       months = 12
-      total = MONTHLY_PRICE * 12 * 0.85 // 15% discount
+      total = monthlyPrice * 12 * 0.85 // 15% discount
     }
 
     return {
-      monthly: MONTHLY_PRICE,
+      monthly: monthlyPrice,
       total: Math.round(total),
       months,
       discount: cycle.discount
@@ -134,7 +154,24 @@ export default function SubscriptionPurchase() {
       }
     } catch (err: any) {
       console.error('Purchase error:', err)
-      setError(err.response?.data?.message || 'Failed to create subscription')
+      const errorData = err.response?.data
+
+      // Check if this is a downgrade attempt
+      if (errorData?.currentSubscription) {
+        const currentSub = errorData.currentSubscription
+        setError(
+          `⚠️ ${errorData.message}\n\n` +
+          `📦 Gói hiện tại: ${currentSub.billingCycle}\n` +
+          `📅 Hết hạn: ${new Date(currentSub.endDate).toLocaleDateString('vi-VN')}\n` +
+          `⏳ Còn lại: ${currentSub.daysRemaining} ngày\n\n` +
+          (errorData.upgradeAvailable
+            ? '💡 Hãy sử dụng nút "Nâng cấp" trong trang "Gói Đã Mua" để được ưu đãi!'
+            : '💡 Vui lòng đợi gói hiện tại hết hạn hoặc sử dụng chức năng Nâng cấp.')
+        )
+      } else {
+        setError(errorData?.message || 'Failed to create subscription')
+      }
+
       setPurchasing(false)
     }
   }
@@ -175,6 +212,13 @@ export default function SubscriptionPurchase() {
 
           {/* Selection Form */}
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 mb-8">
+            {loading ? (
+              <div className="text-center py-12">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+                <p className="text-gray-600 mt-4">Đang tải giá...</p>
+              </div>
+            ) : (
+              <>
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Chọn vị trí và chu kỳ thanh toán</h2>
             
             {/* Location Selection */}
@@ -309,6 +353,8 @@ export default function SubscriptionPurchase() {
                 `Đăng ký với ${pricing.total.toLocaleString()} đ`
               )}
             </button>
+              </>
+            )}
           </div>
 
           {/* Features Info */}

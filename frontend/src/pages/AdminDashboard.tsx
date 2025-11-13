@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AdminLayout from '../components/AdminLayout'
-import { datasetsApi, moderationApi, payoutsApi } from '../api'
+import { datasetsApi, moderationApi, payoutsApi, providersApi, adminApi } from '../api'
 import { Dataset } from '../types'
 
 export default function AdminDashboard() {
@@ -15,6 +15,7 @@ export default function AdminDashboard() {
     adminRevenue: 0,
     pendingPayouts: 0
   })
+  const [packageSales, setPackageSales] = useState<any>(null)
   const [recentDatasets, setRecentDatasets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -25,30 +26,35 @@ export default function AdminDashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true)
-      
-      // Load data from multiple endpoints
-      const [allDatasets, pendingDatasets, revenueSummary, allPayouts] = await Promise.all([
+
+      // Use new comprehensive admin API
+      const [dashboardStats, allDatasets, salesStats] = await Promise.all([
+        adminApi.getDashboardStats().catch(() => null),
         datasetsApi.getAll().catch(() => []),
-        moderationApi.getPending().catch(() => []),
-        payoutsApi.getRevenueSummary().catch(() => null),
-        payoutsApi.getAll().catch(() => [])
+        payoutsApi.getPackageSales().catch(() => null)
       ])
 
-      // Calculate stats
-      const providers = new Set(allDatasets.map((d: any) => d.providerId))
-      
-      setStats({
-        totalDatasets: allDatasets.length,
-        pendingReview: pendingDatasets.length,
-        approvedDatasets: allDatasets.filter((d: any) => d.moderationStatus === 'Approved').length,
-        totalProviders: providers.size,
-        totalConsumers: 0, // Would need separate API
-        totalRevenue: (revenueSummary?.totalProviderPayout || 0) + (revenueSummary?.totalAdminRevenue || 0),
-        adminRevenue: revenueSummary?.totalAdminRevenue || 0,
-        pendingPayouts: allPayouts
-          .filter((p: any) => p.payoutStatus === 'Pending')
-          .reduce((sum: number, p: any) => sum + (p.totalDue || 0), 0)
-      })
+      console.log('📊 Admin Dashboard Stats:', dashboardStats)
+
+      if (dashboardStats) {
+        setStats({
+          totalDatasets: dashboardStats.datasets.total,
+          pendingReview: dashboardStats.datasets.pending,
+          approvedDatasets: dashboardStats.datasets.approved,
+          totalProviders: dashboardStats.providers.total,
+          totalConsumers: dashboardStats.consumers.total,
+          totalRevenue: dashboardStats.packages.total.revenue,
+          adminRevenue: dashboardStats.revenue.adminRevenue,
+          pendingPayouts: dashboardStats.payouts.pending
+        })
+
+        setPackageSales(salesStats || {
+          dataPackages: dashboardStats.packages.dataPackages,
+          subscriptionPackages: dashboardStats.packages.subscriptions,
+          apiPackages: dashboardStats.packages.apiPackages,
+          summary: dashboardStats.packages.total
+        })
+      }
 
       setRecentDatasets(allDatasets.slice(0, 5))
     } catch (error) {
@@ -137,6 +143,79 @@ export default function AdminDashboard() {
           </div>
         </div>
 
+        {/* Package Sales Breakdown */}
+        {packageSales && (
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+              <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+              </svg>
+              Chi tiết gói đã bán
+            </h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              {/* Data Packages */}
+              <div className="border-2 border-blue-200 rounded-xl p-4 bg-blue-50">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-blue-900">📦 Data Packages</h3>
+                  <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-bold">
+                    {packageSales.dataPackages?.count || 0}
+                  </span>
+                </div>
+                <div className="text-2xl font-bold text-blue-600 mb-1">
+                  {(packageSales.dataPackages?.totalRevenue || 0).toLocaleString('vi-VN')} đ
+                </div>
+                <div className="text-xs text-blue-700">Mua data theo địa điểm</div>
+              </div>
+
+              {/* Subscription Packages */}
+              <div className="border-2 border-purple-200 rounded-xl p-4 bg-purple-50">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-purple-900">🔄 Subscriptions</h3>
+                  <span className="bg-purple-600 text-white px-3 py-1 rounded-full text-sm font-bold">
+                    {packageSales.subscriptionPackages?.count || 0}
+                  </span>
+                </div>
+                <div className="text-2xl font-bold text-purple-600 mb-1">
+                  {(packageSales.subscriptionPackages?.totalRevenue || 0).toLocaleString('vi-VN')} đ
+                </div>
+                <div className="text-xs text-purple-700">Dashboard theo tháng</div>
+              </div>
+
+              {/* API Packages */}
+              <div className="border-2 border-orange-200 rounded-xl p-4 bg-orange-50">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-orange-900">🔌 API Packages</h3>
+                  <span className="bg-orange-600 text-white px-3 py-1 rounded-full text-sm font-bold">
+                    {packageSales.apiPackages?.count || 0}
+                  </span>
+                </div>
+                <div className="text-2xl font-bold text-orange-600 mb-1">
+                  {(packageSales.apiPackages?.totalRevenue || 0).toLocaleString('vi-VN')} đ
+                </div>
+                <div className="text-xs text-orange-700">API call credits</div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 border border-indigo-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-indigo-700 font-medium mb-1">Tổng packages đã bán</div>
+                  <div className="text-3xl font-bold text-indigo-900">
+                    {packageSales.summary?.totalPackages || 0}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm text-indigo-700 font-medium mb-1">Tổng doanh thu</div>
+                  <div className="text-3xl font-bold text-indigo-900">
+                    {(packageSales.summary?.totalRevenue || 0).toLocaleString('vi-VN')} đ
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Quick Actions */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
           <h2 className="text-xl font-bold mb-4">Quick Actions</h2>
@@ -174,7 +253,7 @@ export default function AdminDashboard() {
             </Link>
 
             <Link
-              to="/catalog"
+              to="/"
               className="group p-6 border-2 border-purple-200 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition-all text-center"
             >
               <div className="text-4xl mb-3">📊</div>
@@ -188,7 +267,7 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
           <div className="p-6 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-xl font-bold">Datasets gần đây</h2>
-            <Link to="/catalog" className="text-blue-600 hover:text-blue-700 font-medium text-sm">
+            <Link to="/" className="text-blue-600 hover:text-blue-700 font-medium text-sm">
               Xem tất cả →
             </Link>
           </div>

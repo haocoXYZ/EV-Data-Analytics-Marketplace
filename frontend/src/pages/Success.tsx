@@ -105,7 +105,7 @@ export default function Success() {
                     Xem Datasets của tôi →
                   </Link>
                   <Link
-                    to="/catalog"
+                    to="/"
                     className="w-full bg-gray-100 text-gray-700 px-6 py-3 rounded-xl font-semibold text-center hover:bg-gray-200 transition-colors"
                   >
                     Tiếp tục mua sắm

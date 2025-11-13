@@ -2,174 +2,142 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using EVDataMarketplace.API.Data;
 
-namespace EVDataMarketplace.API.Controllers;
-
-[ApiController]
-[Route("api/[controller]")]
-public class LocationsController : ControllerBase
+namespace EVDataMarketplace.API.Controllers
 {
-    private readonly EVDataMarketplaceDbContext _context;
-
-    public LocationsController(EVDataMarketplaceDbContext context)
+    [ApiController]
+    [Route("api/[controller]")]
+    public class LocationsController : ControllerBase
     {
-        _context = context;
-    }
+        private readonly EVDataMarketplaceDbContext _context;
 
-    /// <summary>
-    /// Get all provinces
-    /// </summary>
-    [HttpGet("provinces")]
-    public async Task<IActionResult> GetProvinces()
-    {
-        var provinces = await _context.Provinces
-            .OrderBy(p => p.Name)
-            .Select(p => new
-            {
-                provinceId = p.ProvinceId,
-                name = p.Name,
-                code = p.Code
-            })
-            .ToListAsync();
-
-        return Ok(provinces);
-    }
-
-    /// <summary>
-    /// Get a specific province by ID
-    /// </summary>
-    [HttpGet("provinces/{id}")]
-    public async Task<IActionResult> GetProvince(int id)
-    {
-        var province = await _context.Provinces
-            .Where(p => p.ProvinceId == id)
-            .Select(p => new
-            {
-                provinceId = p.ProvinceId,
-                name = p.Name,
-                code = p.Code
-            })
-            .FirstOrDefaultAsync();
-
-        if (province == null)
+        public LocationsController(EVDataMarketplaceDbContext context)
         {
-            return NotFound(new { message = "Province not found" });
+            _context = context;
         }
 
-        return Ok(province);
-    }
-
-    /// <summary>
-    /// Get all districts for a specific province
-    /// </summary>
-    [HttpGet("provinces/{provinceId}/districts")]
-    public async Task<IActionResult> GetDistrictsByProvince(int provinceId)
-    {
-        // Verify province exists
-        var provinceExists = await _context.Provinces
-            .AnyAsync(p => p.ProvinceId == provinceId);
-
-        if (!provinceExists)
+        /// <summary>
+        /// GET /api/locations/provinces
+        /// Get all provinces
+        /// </summary>
+        [HttpGet("provinces")]
+        public async Task<IActionResult> GetProvinces()
         {
-            return NotFound(new { message = "Province not found" });
+            try
+            {
+                var provinces = await _context.Provinces
+                    .OrderBy(p => p.Name)
+                    .Select(p => new
+                    {
+                        p.ProvinceId,
+                        p.Name,
+                        p.Code
+                    })
+                    .ToListAsync();
+
+                return Ok(provinces);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error retrieving provinces", error = ex.Message });
+            }
         }
 
-        var districts = await _context.Districts
-            .Where(d => d.ProvinceId == provinceId)
-            .OrderBy(d => d.Name)
-            .Select(d => new
-            {
-                districtId = d.DistrictId,
-                provinceId = d.ProvinceId,
-                name = d.Name,
-                type = d.Type
-            })
-            .ToListAsync();
-
-        return Ok(districts);
-    }
-
-    /// <summary>
-    /// Get all districts (all provinces)
-    /// </summary>
-    [HttpGet("districts")]
-    public async Task<IActionResult> GetAllDistricts([FromQuery] int? provinceId = null)
-    {
-        var query = _context.Districts.AsQueryable();
-
-        if (provinceId.HasValue)
+        /// <summary>
+        /// GET /api/locations/provinces/{id}
+        /// Get province by ID
+        /// </summary>
+        [HttpGet("provinces/{id}")]
+        public async Task<IActionResult> GetProvinceById(int id)
         {
-            query = query.Where(d => d.ProvinceId == provinceId.Value);
+            try
+            {
+                var province = await _context.Provinces
+                    .Where(p => p.ProvinceId == id)
+                    .Select(p => new
+                    {
+                        p.ProvinceId,
+                        p.Name,
+                        p.Code
+                    })
+                    .FirstOrDefaultAsync();
+
+                if (province == null)
+                {
+                    return NotFound(new { message = "Province not found" });
+                }
+
+                return Ok(province);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error retrieving province", error = ex.Message });
+            }
         }
 
-        var districts = await query
-            .OrderBy(d => d.ProvinceId)
-            .ThenBy(d => d.Name)
-            .Select(d => new
-            {
-                districtId = d.DistrictId,
-                provinceId = d.ProvinceId,
-                name = d.Name,
-                type = d.Type
-            })
-            .ToListAsync();
-
-        return Ok(districts);
-    }
-
-    /// <summary>
-    /// Get a specific district by ID
-    /// </summary>
-    [HttpGet("districts/{id}")]
-    public async Task<IActionResult> GetDistrict(int id)
-    {
-        var district = await _context.Districts
-            .Include(d => d.Province)
-            .Where(d => d.DistrictId == id)
-            .Select(d => new
-            {
-                districtId = d.DistrictId,
-                provinceId = d.ProvinceId,
-                provinceName = d.Province != null ? d.Province.Name : "Unknown",
-                name = d.Name,
-                type = d.Type
-            })
-            .FirstOrDefaultAsync();
-
-        if (district == null)
+        /// <summary>
+        /// GET /api/locations/districts
+        /// Get all districts (optionally filter by provinceId)
+        /// </summary>
+        [HttpGet("districts")]
+        public async Task<IActionResult> GetDistricts([FromQuery] int? provinceId)
         {
-            return NotFound(new { message = "District not found" });
+            try
+            {
+                var query = _context.Districts.AsQueryable();
+
+                if (provinceId.HasValue)
+                {
+                    query = query.Where(d => d.ProvinceId == provinceId.Value);
+                }
+
+                var districts = await query
+                    .OrderBy(d => d.Name)
+                    .Select(d => new
+                    {
+                        d.DistrictId,
+                        d.ProvinceId,
+                        d.Name
+                    })
+                    .ToListAsync();
+
+                return Ok(districts);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error retrieving districts", error = ex.Message });
+            }
         }
 
-        return Ok(district);
-    }
-
-    /// <summary>
-    /// Get location statistics (for admin/analytics)
-    /// </summary>
-    [HttpGet("stats")]
-    public async Task<IActionResult> GetLocationStats()
-    {
-        var totalProvinces = await _context.Provinces.CountAsync();
-        var totalDistricts = await _context.Districts.CountAsync();
-
-        // Get provinces with district counts
-        var provincesWithCounts = await _context.Provinces
-            .Select(p => new
-            {
-                provinceId = p.ProvinceId,
-                provinceName = p.Name,
-                districtCount = _context.Districts.Count(d => d.ProvinceId == p.ProvinceId)
-            })
-            .Where(p => p.districtCount > 0)
-            .OrderByDescending(p => p.districtCount)
-            .ToListAsync();
-
-        return Ok(new
+        /// <summary>
+        /// GET /api/locations/districts/{id}
+        /// Get district by ID
+        /// </summary>
+        [HttpGet("districts/{id}")]
+        public async Task<IActionResult> GetDistrictById(int id)
         {
-            totalProvinces,
-            totalDistricts,
-            provincesWithDistricts = provincesWithCounts.Count,
-            topProvinces = provincesWithCounts.Take(5)
-        });
+            try
+            {
+                var district = await _context.Districts
+                    .Where(d => d.DistrictId == id)
+                    .Select(d => new
+                    {
+                        d.DistrictId,
+                        d.ProvinceId,
+                        d.Name
+                    })
+                    .FirstOrDefaultAsync();
+
+                if (district == null)
+                {
+                    return NotFound(new { message = "District not found" });
+                }
+
+                return Ok(district);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error retrieving district", error = ex.Message });
+            }
+        }
     }
 }

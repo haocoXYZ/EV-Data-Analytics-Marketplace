@@ -22,6 +22,23 @@ public class DataPackageController : ControllerBase
     }
 
     /// <summary>
+    /// Helper method to escape CSV fields containing commas, quotes, or newlines
+    /// </summary>
+    private static string EscapeCsvField(string? field)
+    {
+        if (string.IsNullOrEmpty(field))
+            return string.Empty;
+
+        // If field contains comma, quote, or newline, wrap in quotes and escape internal quotes
+        if (field.Contains(',') || field.Contains('"') || field.Contains('\n') || field.Contains('\r'))
+        {
+            return $"\"{field.Replace("\"", "\"\"")}\"";
+        }
+
+        return field;
+    }
+
+    /// <summary>
     /// Preview data package before purchase
     /// </summary>
     [HttpGet("preview")]
@@ -79,12 +96,19 @@ public class DataPackageController : ControllerBase
         {
             return Ok(new
             {
-                rowCount = 0,
+                provinceId,
+                provinceName = province.Name,
+                districtId,
+                districtName = district?.Name,
+                totalRecords = 0,
+                dateRange = new
+                {
+                    startDate = startDate ?? DateTime.MinValue,
+                    endDate = endDate ?? DateTime.MaxValue
+                },
                 pricePerRow = 0m,
                 totalPrice = 0m,
-                sampleData = new List<object>(),
-                provinceName = province.Name,
-                districtName = district?.Name,
+                sampleRecords = new List<object>(),
                 message = "No data available for selected filters"
             });
         }
@@ -116,12 +140,19 @@ public class DataPackageController : ControllerBase
 
         return Ok(new
         {
-            rowCount,
+            provinceId,
+            provinceName = province.Name,
+            districtId,
+            districtName = district?.Name,
+            totalRecords = rowCount,
+            dateRange = new
+            {
+                startDate = startDate ?? DateTime.MinValue,
+                endDate = endDate ?? DateTime.MaxValue
+            },
             pricePerRow = pricing.PricePerRow,
             totalPrice,
-            sampleData,
-            provinceName = province.Name,
-            districtName = district?.Name
+            sampleRecords = sampleData
         });
     }
 
@@ -284,9 +315,11 @@ public class DataPackageController : ControllerBase
             return BadRequest(new { message = $"Download limit reached ({purchase.MaxDownload} downloads allowed)" });
         }
 
-        // Query records
+        // Query records with Province and District names
         var query = _context.DatasetRecords
             .Include(r => r.Dataset)
+            .Include(r => r.Province)
+            .Include(r => r.District)
             .Where(r => r.ProvinceId == purchase.ProvinceId)
             .Where(r => r.Dataset!.ModerationStatus == "Approved");
 
@@ -307,17 +340,31 @@ public class DataPackageController : ControllerBase
 
         var records = await query.OrderBy(r => r.ChargingTimestamp).ToListAsync();
 
-        // Generate CSV
+        // Generate CSV with UTF-8 BOM for Excel compatibility
         var csv = new StringBuilder();
-        csv.AppendLine("StationId,StationName,StationAddress,StationOperator,ProvinceId,DistrictId,ChargingTimestamp,EnergyKwh,Voltage,Current,PowerKw,DurationMinutes,ChargingCost,VehicleType,BatteryCapacityKwh,SocStart,SocEnd,DataSource");
+
+        // Add UTF-8 BOM
+        csv.Append('\ufeff');
+
+        // CSV header with Province/District names instead of IDs
+        csv.AppendLine("StationId,StationName,StationAddress,StationOperator,Province,District,ChargingTimestamp,EnergyKwh,Voltage,Current,PowerKw,DurationMinutes,ChargingCost,VehicleType,BatteryCapacityKwh,SocStart,SocEnd,DataSource");
 
         foreach (var record in records)
         {
-            csv.AppendLine($"{record.StationId},{record.StationName},{record.StationAddress},{record.StationOperator}," +
-                          $"{record.ProvinceId},{record.DistrictId},{record.ChargingTimestamp:yyyy-MM-dd HH:mm:ss}," +
+            // Escape commas and quotes in text fields
+            var stationName = EscapeCsvField(record.StationName);
+            var stationAddress = EscapeCsvField(record.StationAddress);
+            var stationOperator = EscapeCsvField(record.StationOperator);
+            var provinceName = EscapeCsvField(record.Province?.Name ?? "Unknown");
+            var districtName = EscapeCsvField(record.District?.Name ?? "N/A");
+            var vehicleType = EscapeCsvField(record.VehicleType);
+            var dataSource = EscapeCsvField(record.DataSource);
+
+            csv.AppendLine($"{record.StationId},{stationName},{stationAddress},{stationOperator}," +
+                          $"{provinceName},{districtName},{record.ChargingTimestamp:yyyy-MM-dd HH:mm:ss}," +
                           $"{record.EnergyKwh},{record.Voltage},{record.Current},{record.PowerKw}," +
-                          $"{record.DurationMinutes},{record.ChargingCost},{record.VehicleType}," +
-                          $"{record.BatteryCapacityKwh},{record.SocStart},{record.SocEnd},{record.DataSource}");
+                          $"{record.DurationMinutes},{record.ChargingCost},{vehicleType}," +
+                          $"{record.BatteryCapacityKwh},{record.SocStart},{record.SocEnd},{dataSource}");
         }
 
         // Update download count
@@ -325,11 +372,11 @@ public class DataPackageController : ControllerBase
         purchase.LastDownloadDate = DateTime.Now;
         await _context.SaveChangesAsync();
 
+        // UTF-8 encoding with BOM for Excel
         var bytes = Encoding.UTF8.GetBytes(csv.ToString());
-        var provinceName = purchase.Province?.Name ?? "Unknown";
-        var fileName = $"charging_data_{provinceName}_{DateTime.Now:yyyyMMdd}.csv";
+        var fileName = $"charging_data_{purchase.Province?.Name ?? "Unknown"}_{DateTime.Now:yyyyMMdd}.csv";
 
-        return File(bytes, "text/csv", fileName);
+        return File(bytes, "text/csv; charset=utf-8", fileName);
     }
 
     /// <summary>
@@ -363,6 +410,8 @@ public class DataPackageController : ControllerBase
                 purchaseId = p.PurchaseId,
                 provinceName = p.Province != null ? p.Province.Name : "Unknown",
                 districtName = p.District != null ? p.District.Name : "All districts",
+                startDate = p.StartDate,
+                endDate = p.EndDate,
                 rowCount = p.RowCount,
                 totalPrice = p.TotalPrice,
                 purchaseDate = p.PurchaseDate,

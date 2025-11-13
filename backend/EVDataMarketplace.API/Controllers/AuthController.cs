@@ -32,10 +32,10 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Email already exists" });
         }
 
-        // Validate role
-        if (request.Role != "DataProvider" && request.Role != "DataConsumer")
+        // Only DataConsumer can self-register. DataProvider accounts must be created by Admin.
+        if (request.Role != "DataConsumer")
         {
-            return BadRequest(new { message = "Invalid role. Must be DataProvider or DataConsumer" });
+            return BadRequest(new { message = "Only DataConsumer can self-register. DataProvider accounts are created by Admin." });
         }
 
         // Create user
@@ -52,30 +52,15 @@ public class AuthController : ControllerBase
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
 
-        // Create DataProvider or DataConsumer profile
-        if (request.Role == "DataProvider")
+        // Create DataConsumer profile (only role allowed for self-registration)
+        var consumer = new DataConsumer
         {
-            var provider = new DataProvider
-            {
-                UserId = user.UserId,
-                CompanyName = request.CompanyName ?? request.FullName,
-                CompanyWebsite = request.CompanyWebsite,
-                ContactEmail = request.Email,
-                CreatedAt = DateTime.Now
-            };
-            _context.DataProviders.Add(provider);
-        }
-        else if (request.Role == "DataConsumer")
-        {
-            var consumer = new DataConsumer
-            {
-                UserId = user.UserId,
-                OrganizationName = request.OrganizationName ?? request.FullName,
-                BillingEmail = request.Email,
-                CreatedAt = DateTime.Now
-            };
-            _context.DataConsumers.Add(consumer);
-        }
+            UserId = user.UserId,
+            OrganizationName = request.OrganizationName ?? request.FullName,
+            BillingEmail = request.Email,
+            CreatedAt = DateTime.Now
+        };
+        _context.DataConsumers.Add(consumer);
 
         await _context.SaveChangesAsync();
 

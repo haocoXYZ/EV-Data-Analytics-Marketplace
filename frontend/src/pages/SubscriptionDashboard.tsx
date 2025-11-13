@@ -4,7 +4,7 @@ import ConsumerLayout from '../components/ConsumerLayout'
 import { subscriptionsApi } from '../api'
 import { SubscriptionDashboardData, ChartDataPoint } from '../types'
 import {
-    LineChart, Line, BarChart, Bar, PieChart, Pie, AreaChart, Area,
+    LineChart, Line, BarChart, Bar, AreaChart, Area,
     XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
 } from 'recharts'
 
@@ -16,6 +16,7 @@ export default function SubscriptionDashboard() {
     const [peakHours, setPeakHours] = useState<ChartDataPoint[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [timeFilter, setTimeFilter] = useState<number | undefined>(undefined) // undefined = All data
 
     // Chart colors
     const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16']
@@ -24,7 +25,7 @@ export default function SubscriptionDashboard() {
         if (subscriptionId) {
             loadDashboard(parseInt(subscriptionId))
         }
-    }, [subscriptionId])
+    }, [subscriptionId, timeFilter])
 
     const loadDashboard = async (id: number) => {
         setLoading(true)
@@ -32,9 +33,9 @@ export default function SubscriptionDashboard() {
         try {
             const [dashboard, energy, stations, hours] = await Promise.all([
                 subscriptionsApi.getDashboard(id),
-                subscriptionsApi.getEnergyOverTime(id, 30),
-                subscriptionsApi.getStationDistribution(id),
-                subscriptionsApi.getPeakHours(id),
+                subscriptionsApi.getEnergyOverTime(id, timeFilter),
+                subscriptionsApi.getStationDistribution(id, timeFilter),
+                subscriptionsApi.getPeakHours(id, timeFilter),
             ])
 
             console.log('📊 Dashboard Data:', dashboard)
@@ -60,7 +61,7 @@ export default function SubscriptionDashboard() {
                 <div className="min-h-screen bg-gray-50 flex items-center justify-center">
                     <div className="text-center">
                         <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600"></div>
-                        <p className="text-gray-600 mt-4 text-lg">Loading dashboard...</p>
+                        <p className="text-gray-600 mt-4 text-lg">Đang tải bảng điều khiển...</p>
                     </div>
                 </div>
             </ConsumerLayout>
@@ -133,7 +134,7 @@ export default function SubscriptionDashboard() {
         return (
             <ConsumerLayout>
                 <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-                    <p className="text-gray-600">No dashboard data available</p>
+                    <p className="text-gray-600">Không có dữ liệu bảng điều khiển</p>
                 </div>
             </ConsumerLayout>
         )
@@ -147,26 +148,90 @@ export default function SubscriptionDashboard() {
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h1 className="text-4xl font-bold mb-3">📊 Subscription Dashboard</h1>
+                                <h1 className="text-4xl font-bold mb-3">📊 Bảng Điều Khiển Gói Đăng Ký</h1>
                                 <p className="text-purple-100 text-lg">
                                     {dashboardData.provinceName}
                                     {dashboardData.districtName && ` - ${dashboardData.districtName}`}
                                 </p>
                                 <p className="text-purple-200 text-sm mt-2">
-                                    Data from {new Date(dashboardData.dateRange.startDate).toLocaleDateString()} to {new Date(dashboardData.dateRange.endDate).toLocaleDateString()}
+                                    Thời gian đăng ký: {new Date(dashboardData.dateRange.startDate).toLocaleDateString('vi-VN')} đến {new Date(dashboardData.dateRange.endDate).toLocaleDateString('vi-VN')}
                                 </p>
                             </div>
                             <Link
                                 to="/my-purchases"
                                 className="bg-white text-purple-600 px-6 py-3 rounded-lg font-semibold hover:bg-purple-50 transition-colors"
                             >
-                                ← Back to Purchases
+                                ← Quay Lại Gói Đã Mua
                             </Link>
                         </div>
                     </div>
                 </div>
 
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Time Filter */}
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4">
+                        <div className="flex items-center justify-between flex-wrap gap-4">
+                            <div className="flex items-center gap-2">
+                                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                </svg>
+                                <span className="font-semibold text-gray-900">Bộ lọc thời gian:</span>
+                            </div>
+                            <div className="flex gap-2 flex-wrap">
+                                <button
+                                    onClick={() => setTimeFilter(7)}
+                                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                                        timeFilter === 7
+                                            ? 'bg-purple-600 text-white shadow-md'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    7 ngày
+                                </button>
+                                <button
+                                    onClick={() => setTimeFilter(30)}
+                                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                                        timeFilter === 30
+                                            ? 'bg-purple-600 text-white shadow-md'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    30 ngày
+                                </button>
+                                <button
+                                    onClick={() => setTimeFilter(90)}
+                                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                                        timeFilter === 90
+                                            ? 'bg-purple-600 text-white shadow-md'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    90 ngày
+                                </button>
+                                <button
+                                    onClick={() => setTimeFilter(undefined)}
+                                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                                        timeFilter === undefined
+                                            ? 'bg-purple-600 text-white shadow-md'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    Tất cả dữ liệu
+                                </button>
+                            </div>
+                        </div>
+                        {timeFilter && (
+                            <div className="mt-3 text-sm text-gray-600 flex items-center gap-1">
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                </svg>
+                                Hiển thị dữ liệu của {timeFilter} ngày gần nhất
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
                     {/* Stats Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
@@ -181,7 +246,7 @@ export default function SubscriptionDashboard() {
                             <div className="text-3xl font-bold text-gray-900 mb-1">
                                 {(dashboardData.totalStations || 0).toLocaleString()}
                             </div>
-                            <div className="text-sm text-gray-600">Total Charging Stations</div>
+                            <div className="text-sm text-gray-600">Tổng Trạm Sạc</div>
                         </div>
 
                         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
@@ -195,7 +260,7 @@ export default function SubscriptionDashboard() {
                             <div className="text-3xl font-bold text-gray-900 mb-1">
                                 {(dashboardData.totalEnergyKwh || 0).toLocaleString()} kWh
                             </div>
-                            <div className="text-sm text-gray-600">Total Energy Consumed</div>
+                            <div className="text-sm text-gray-600">Tổng Năng Lượng Tiêu Thụ</div>
                         </div>
 
                         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
@@ -207,9 +272,9 @@ export default function SubscriptionDashboard() {
                                 </div>
                             </div>
                             <div className="text-3xl font-bold text-gray-900 mb-1">
-                                {(dashboardData.averageChargingDuration || 0).toFixed(1)} min
+                                {(dashboardData.averageChargingDuration || 0).toFixed(1)} phút
                             </div>
-                            <div className="text-sm text-gray-600">Avg Charging Duration</div>
+                            <div className="text-sm text-gray-600">Thời Gian Sạc Trung Bình</div>
                         </div>
 
                         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
@@ -223,7 +288,7 @@ export default function SubscriptionDashboard() {
                             <div className="text-3xl font-bold text-gray-900 mb-1">
                                 {(dashboardData.totalChargingSessions || 0).toLocaleString()}
                             </div>
-                            <div className="text-sm text-gray-600">Total Charging Sessions</div>
+                            <div className="text-sm text-gray-600">Tổng Phiên Sạc</div>
                         </div>
                     </div>
 
@@ -235,7 +300,7 @@ export default function SubscriptionDashboard() {
                                 <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
                                 </svg>
-                                Energy Consumption Over Time
+                                Tiêu Thụ Năng Lượng Theo Thời Gian
                             </h3>
                             {energyOverTime.length > 0 ? (
                                 <ResponsiveContainer width="100%" height={300}>
@@ -276,49 +341,73 @@ export default function SubscriptionDashboard() {
                                 </ResponsiveContainer>
                             ) : (
                                 <div className="h-[300px] flex items-center justify-center text-gray-500">
-                                    No data available
+                                    Không có dữ liệu
                                 </div>
                             )}
                         </div>
 
-                        {/* Station Distribution - Pie Chart */}
+                        {/* Station Distribution - Bar Chart */}
                         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
                             <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
                                 <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                 </svg>
-                                Stations by District
+                                Phân Bố Trạm Sạc Theo Quận/Huyện
                             </h3>
                             {stationDistribution.length > 0 ? (
                                 <ResponsiveContainer width="100%" height={300}>
-                                    <PieChart>
-                                        <Pie
-                                            data={stationDistribution}
-                                            cx="50%"
-                                            cy="50%"
-                                            labelLine={false}
-                                            label={({ label, percent }) => `${label}: ${(percent * 100).toFixed(0)}%`}
-                                            outerRadius={80}
-                                            fill="#8884d8"
-                                            dataKey="value"
-                                        >
-                                            {stationDistribution.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip 
-                                            contentStyle={{ 
-                                                backgroundColor: '#fff', 
+                                    <BarChart data={stationDistribution}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                                        <XAxis
+                                            dataKey="label"
+                                            tick={{ fontSize: 11 }}
+                                            stroke="#6B7280"
+                                            angle={-45}
+                                            textAnchor="end"
+                                            height={80}
+                                        />
+                                        <YAxis
+                                            tick={{ fontSize: 12 }}
+                                            stroke="#6B7280"
+                                            label={{ value: 'Năng lượng (kWh)', angle: -90, position: 'insideLeft' }}
+                                        />
+                                        <Tooltip
+                                            contentStyle={{
+                                                backgroundColor: '#fff',
                                                 border: '1px solid #E5E7EB',
                                                 borderRadius: '8px',
                                                 boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                                             }}
+                                            formatter={(value: any, name: any, props: any) => {
+                                                const entry = props.payload
+                                                return [
+                                                    <div key="tooltip">
+                                                        <div><strong>Năng lượng:</strong> {value.toLocaleString()} kWh</div>
+                                                        {entry.stationCount && <div><strong>Số trạm:</strong> {entry.stationCount}</div>}
+                                                    </div>,
+                                                    entry.label || 'Quận/Huyện'
+                                                ]
+                                            }}
+                                            cursor={{ fill: 'rgba(16, 185, 129, 0.1)' }}
                                         />
-                                    </PieChart>
+                                        <Bar
+                                            dataKey="value"
+                                            fill="#10B981"
+                                            radius={[8, 8, 0, 0]}
+                                            name="Năng lượng (kWh)"
+                                        >
+                                            {stationDistribution.map((entry, index) => (
+                                                <Cell
+                                                    key={`cell-${index}`}
+                                                    fill={CHART_COLORS[index % CHART_COLORS.length]}
+                                                />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
                                 </ResponsiveContainer>
                             ) : (
                                 <div className="h-[300px] flex items-center justify-center text-gray-500">
-                                    No data available
+                                    Không có dữ liệu
                                 </div>
                             )}
                         </div>
@@ -330,7 +419,7 @@ export default function SubscriptionDashboard() {
                             <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                            Peak Charging Hours (24h)
+                            Giờ Cao Điểm Sạc Điện (24h)
                         </h3>
                         {peakHours.length > 0 ? (
                             <ResponsiveContainer width="100%" height={350}>
@@ -371,7 +460,7 @@ export default function SubscriptionDashboard() {
                             </ResponsiveContainer>
                         ) : (
                             <div className="h-[350px] flex items-center justify-center text-gray-500">
-                                No data available
+                                Không có dữ liệu
                             </div>
                         )}
                     </div>
@@ -379,24 +468,24 @@ export default function SubscriptionDashboard() {
                     {/* Info Card */}
                     <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-2xl p-6 border border-purple-200">
                         <h3 className="font-bold text-purple-900 mb-3 flex items-center gap-2">
-                            📈 Interactive Dashboard Features
+                            📈 Tính Năng Bảng Điều Khiển
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-purple-800">
                             <div className="flex items-start gap-2">
                                 <span className="text-blue-600 font-bold">📊</span>
-                                <span><strong>Area Chart:</strong> Energy consumption trends over time</span>
+                                <span><strong>Biểu đồ vùng:</strong> Xu hướng tiêu thụ năng lượng theo thời gian</span>
                             </div>
                             <div className="flex items-start gap-2">
-                                <span className="text-green-600 font-bold">🥧</span>
-                                <span><strong>Pie Chart:</strong> Station distribution by district</span>
+                                <span className="text-green-600 font-bold">📊</span>
+                                <span><strong>Biểu đồ cột:</strong> Phân bố trạm sạc theo quận/huyện</span>
                             </div>
                             <div className="flex items-start gap-2">
                                 <span className="text-purple-600 font-bold">📊</span>
-                                <span><strong>Bar Chart:</strong> Peak charging hours analysis (24h)</span>
+                                <span><strong>Biểu đồ cột:</strong> Phân tích giờ cao điểm sạc (24h)</span>
                             </div>
                             <div className="flex items-start gap-2">
                                 <span className="text-orange-600 font-bold">⚡</span>
-                                <span><strong>Real Data:</strong> Aggregated from provider uploads</span>
+                                <span><strong>Dữ liệu thực:</strong> Tổng hợp từ nhà cung cấp</span>
                             </div>
                         </div>
                     </div>

@@ -147,9 +147,10 @@ export default function ProviderNew() {
               <div className="bg-white/60 rounded-lg p-3 text-xs text-gray-600">
                 <p className="font-semibold mb-1">ℹ️ Template includes:</p>
                 <ul className="list-disc list-inside space-y-1">
-                  <li>All required fields: StationId, StationName, ProvinceId, DistrictId, etc.</li>
-                  <li>Sample data showing the correct format</li>
-                  <li>Data validation guidelines</li>
+                  <li>All required fields: StationId, StationName, Province, District, etc.</li>
+                  <li>Vietnamese instructions with examples</li>
+                  <li>Sample data with province/district names (no IDs needed!)</li>
+                  <li>Case-insensitive, diacritic-insensitive matching</li>
                 </ul>
               </div>
             </div>
@@ -253,14 +254,13 @@ export default function ProviderNew() {
               </div>
 
               <div className="bg-blue-50 rounded-lg p-4 text-sm text-blue-800">
-                <p className="font-semibold mb-2">ℹ️ Yêu cầu file CSV:</p>
+                <p className="font-semibold mb-2">✨ Dễ dàng hơn với tên Tỉnh/Quận:</p>
                 <ul className="list-disc list-inside space-y-1 text-xs">
-                  <li>File must match the template structure</li>
-                  <li>All required fields must be present</li>
-                  <li>ProvinceId and DistrictId must exist in database</li>
-                  <li>Dates in format: yyyy-MM-dd HH:mm:ss</li>
-                  <li>Numeric fields must be valid numbers</li>
-                  <li>Maximum file size: 100MB</li>
+                  <li><strong>Nhập TÊN</strong> trực tiếp: "Hà Nội", "Ba Đình", "TP.Hồ Chí Minh", "Quận 1"</li>
+                  <li><strong>Không phân biệt</strong> hoa/thường và dấu: "Ha Noi" = "Hà Nội" = "HÀ NỘI"</li>
+                  <li><strong>Tự động nhận diện</strong>: "TP.Hồ Chí Minh" = "Hồ Chí Minh" = "HCM"</li>
+                  <li>Hoặc dùng ProvinceId/DistrictId (cách cũ vẫn hoạt động)</li>
+                  <li>Dates: yyyy-MM-dd HH:mm:ss | Max size: 100MB</li>
                 </ul>
               </div>
             </div>

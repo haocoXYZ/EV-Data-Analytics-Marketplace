@@ -67,10 +67,13 @@ export default function Home() {
                   </svg>
                 </Link>
                 <Link
-                  to="/catalog"
-                  className="bg-transparent text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-white/10 transition-all border-2 border-white/30 backdrop-blur-sm"
+                  to="/buy-api"
+                  className="bg-transparent text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-white/10 transition-all border-2 border-white/30 backdrop-blur-sm inline-flex items-center"
                 >
-                  Xem danh sách datasets
+                  Mua gói API
+                  <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  </svg>
                 </Link>
               </div>
             </div>
@@ -219,6 +222,12 @@ export default function Home() {
                 className="inline-block bg-gradient-to-r from-purple-500 to-indigo-500 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:from-purple-600 hover:to-indigo-600 transition-all shadow-xl hover:shadow-2xl hover:scale-105"
               >
                 Đăng ký Dashboard →
+              </Link>
+              <Link
+                to="/buy-api"
+                className="inline-block bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:from-indigo-600 hover:to-purple-600 transition-all shadow-xl hover:shadow-2xl hover:scale-105"
+              >
+                Mua gói API →
               </Link>
             </div>
           </div>

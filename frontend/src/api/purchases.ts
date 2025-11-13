@@ -48,11 +48,11 @@ export const purchasesApi = {
   },
 
   /**
-   * GET /api/purchases/download/{purchaseId}
+   * GET /api/data-packages/{purchaseId}/download
    * Download purchased data package as CSV
    */
   downloadDataPackage: async (purchaseId: number): Promise<Blob> => {
-    const response = await client.get(`/purchases/download/${purchaseId}`, {
+    const response = await client.get(`/data-packages/${purchaseId}/download`, {
       responseType: 'blob',
     })
     return response.data
@@ -114,10 +114,10 @@ export const purchasesApi = {
    */
   createAPIPackage: async (data: APIPackagePurchaseRequest): Promise<{
     message: string
-    purchaseId: number
-    totalAPICalls: number
+    apiPurchaseId: number
+    apiCallsPurchased: number
     pricePerCall: number
-    totalPrice: number
+    totalPaid: number
     status: string
     paymentInfo: {
       paymentType: string
@@ -134,8 +134,36 @@ export const purchasesApi = {
    * Get consumer's API packages
    */
   getMyAPIPackages: async (): Promise<APIPackagePurchase[]> => {
-    const response = await client.get<APIPackagePurchase[]>('/purchases/my-api-packages')
-    return response.data
+    const response = await client.get<Array<{
+      apiPurchaseId: number
+      provinceName?: string
+      districtName?: string
+      apiCallsPurchased: number
+      apiCallsUsed: number
+      remainingCalls: number
+      pricePerCall: number
+      totalPaid: number
+      purchaseDate: string
+      expiryDate?: string
+      status: string
+      apiKeys?: any[]
+    }>>('/purchases/my-api-packages')
+
+    // Transform backend response (apiPurchaseId) to frontend format (purchaseId)
+    return response.data.map(pkg => ({
+      purchaseId: pkg.apiPurchaseId,  // Rename field
+      consumerId: 0, // Not returned by backend but required by type
+      totalAPICalls: pkg.apiCallsPurchased,
+      apiCallsUsed: pkg.apiCallsUsed,
+      apiCallsRemaining: pkg.remainingCalls,
+      pricePerCall: pkg.pricePerCall,
+      totalPrice: pkg.totalPaid,
+      status: pkg.status,
+      purchaseDate: pkg.purchaseDate,
+      expiryDate: pkg.expiryDate,
+      provinceId: undefined,
+      districtId: undefined
+    }))
   },
 
   // ============= ALL PURCHASES =============
@@ -149,3 +177,9 @@ export const purchasesApi = {
     return response.data
   },
 }
+
+
+
+
+
+

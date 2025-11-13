@@ -13,18 +13,21 @@ const RoleBasedRedirect = () => {
     const currentPath = location.pathname
     
     // Define role-based allowed paths
-    const adminPaths = ['/admin', '/moderation']
+    const adminPaths = ['/admin']
     const providerPaths = ['/provider']
     const consumerPaths = ['/buy-data', '/subscribe', '/buy-api', '/checkout', '/my-purchases', '/subscriptions', '/api-packages']
-    const publicPaths = ['/login', '/register', '/catalog', '/dataset']
+    const publicPaths = ['/login', '/register', '/dataset']
 
     // Role-based routing logic
     const role = user.role
 
     // Special handling for home page "/"
     if (currentPath === '/') {
-      if (role === 'Admin' || role === 'Moderator') {
+      if (role === 'Admin') {
         navigate('/admin/dashboard', { replace: true })
+        return
+      } else if (role === 'Moderator') {
+        navigate('/admin/moderation', { replace: true })
         return
       } else if (role === 'DataProvider') {
         navigate('/provider/dashboard', { replace: true })
@@ -66,7 +69,7 @@ const RoleBasedRedirect = () => {
       
       if (isAdminPath || isProviderPath) {
         // Redirect Consumer away from admin/provider pages
-        navigate('/catalog', { replace: true })
+        navigate('/', { replace: true })
       }
       return
     }

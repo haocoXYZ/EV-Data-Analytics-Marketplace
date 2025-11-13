@@ -21,6 +21,59 @@ public class APIPackageController : ControllerBase
     }
 
     /// <summary>
+    /// Normalize Vietnamese text for case-insensitive, diacritic-insensitive comparison
+    /// </summary>
+    private static string NormalizeName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return string.Empty;
+
+        var normalized = name.ToLowerInvariant().Trim();
+
+        normalized = normalized
+            .Replace("tp.", "")
+            .Replace("thành phố", "")
+            .Replace("tỉnh", "")
+            .Replace("quận", "")
+            .Replace("huyện", "")
+            .Replace("  ", " ")
+            .Trim();
+
+        return RemoveDiacritics(normalized);
+    }
+
+    /// <summary>
+    /// Remove Vietnamese diacritics
+    /// </summary>
+    private static string RemoveDiacritics(string text)
+    {
+        var diacriticMap = new Dictionary<char, char>
+        {
+            {'á', 'a'}, {'à', 'a'}, {'ả', 'a'}, {'ã', 'a'}, {'ạ', 'a'},
+            {'ă', 'a'}, {'ắ', 'a'}, {'ằ', 'a'}, {'ẳ', 'a'}, {'ẵ', 'a'}, {'ặ', 'a'},
+            {'â', 'a'}, {'ấ', 'a'}, {'ầ', 'a'}, {'ẩ', 'a'}, {'ẫ', 'a'}, {'ậ', 'a'},
+            {'é', 'e'}, {'è', 'e'}, {'ẻ', 'e'}, {'ẽ', 'e'}, {'ẹ', 'e'},
+            {'ê', 'e'}, {'ế', 'e'}, {'ề', 'e'}, {'ể', 'e'}, {'ễ', 'e'}, {'ệ', 'e'},
+            {'í', 'i'}, {'ì', 'i'}, {'ỉ', 'i'}, {'ĩ', 'i'}, {'ị', 'i'},
+            {'ó', 'o'}, {'ò', 'o'}, {'ỏ', 'o'}, {'õ', 'o'}, {'ọ', 'o'},
+            {'ô', 'o'}, {'ố', 'o'}, {'ồ', 'o'}, {'ổ', 'o'}, {'ỗ', 'o'}, {'ộ', 'o'},
+            {'ơ', 'o'}, {'ớ', 'o'}, {'ờ', 'o'}, {'ở', 'o'}, {'ỡ', 'o'}, {'ợ', 'o'},
+            {'ú', 'u'}, {'ù', 'u'}, {'ủ', 'u'}, {'ũ', 'u'}, {'ụ', 'u'},
+            {'ư', 'u'}, {'ứ', 'u'}, {'ừ', 'u'}, {'ử', 'u'}, {'ữ', 'u'}, {'ự', 'u'},
+            {'ý', 'y'}, {'ỳ', 'y'}, {'ỷ', 'y'}, {'ỹ', 'y'}, {'ỵ', 'y'},
+            {'đ', 'd'}
+        };
+
+        var result = new System.Text.StringBuilder();
+        foreach (var c in text)
+        {
+            result.Append(diacriticMap.ContainsKey(c) ? diacriticMap[c] : c);
+        }
+
+        return result.ToString();
+    }
+
+    /// <summary>
     /// Purchase API package
     /// </summary>
     [HttpPost("purchase")]
@@ -101,10 +154,10 @@ public class APIPackageController : ControllerBase
         return Ok(new
         {
             message = "API package created successfully. Please proceed to payment.",
-            purchaseId = apiPackage.ApiPurchaseId,
-            totalAPICalls = dto.ApiCallsPurchased,
+            apiPurchaseId = apiPackage.ApiPurchaseId,
+            apiCallsPurchased = dto.ApiCallsPurchased,
             pricePerCall = pricing.ApiPricePerCall.Value,
-            totalPrice = totalPaid,
+            totalPaid,
             status = apiPackage.Status,
             paymentInfo = new
             {
@@ -171,10 +224,9 @@ public class APIPackageController : ControllerBase
         {
             message = "API key generated successfully",
             keyId = apiKey.KeyId,
-            apiKey = apiKey.KeyValue,
+            keyValue = apiKey.KeyValue,
             keyName = apiKey.KeyName,
             createdAt = apiKey.CreatedAt,
-            isActive = apiKey.IsActive,
             warning = "Please save this API key. It cannot be retrieved again."
         });
     }
@@ -207,7 +259,7 @@ public class APIPackageController : ControllerBase
             .Select(k => new
             {
                 keyId = k.KeyId,
-                apiKey = k.KeyValue,
+                keyValue = k.KeyValue,
                 keyName = k.KeyName,
                 isActive = k.IsActive,
                 createdAt = k.CreatedAt,
@@ -272,6 +324,11 @@ public class APIPackageController : ControllerBase
 
     /// <summary>
     /// Query data using API key (Public endpoint)
+    /// Supports both ID and Name for province/district:
+    /// - Use provinceId/districtId (int) OR province/district (string)
+    /// - Examples:
+    ///   ?provinceId=1 OR ?province=Ha Noi
+    ///   ?districtId=1 OR ?district=Ba Dinh
     /// </summary>
     [HttpGet("/api/data")]
     [AllowAnonymous]
@@ -279,6 +336,8 @@ public class APIPackageController : ControllerBase
         [FromHeader(Name = "X-API-Key")] string? apiKey,
         [FromQuery] int? provinceId,
         [FromQuery] int? districtId,
+        [FromQuery] string? province,
+        [FromQuery] string? district,
         [FromQuery] DateTime? startDate,
         [FromQuery] DateTime? endDate,
         [FromQuery] int page = 1,
@@ -322,38 +381,79 @@ public class APIPackageController : ControllerBase
             return BadRequest(new { message = "API package has expired" });
         }
 
-        // Validate scope
+        // Convert province/district names to IDs if provided
+        int? resolvedProvinceId = provinceId;
+        int? resolvedDistrictId = districtId;
+
+        // Handle province parameter (name or ID)
+        if (!string.IsNullOrEmpty(province) && !provinceId.HasValue)
+        {
+            var provinces = await _context.Provinces.ToListAsync();
+            var normalizedProvince = NormalizeName(province);
+            var matchedProvince = provinces.FirstOrDefault(p => NormalizeName(p.Name) == normalizedProvince);
+
+            if (matchedProvince == null)
+            {
+                return BadRequest(new { message = $"Province '{province}' not found. Please check spelling or use provinceId parameter." });
+            }
+
+            resolvedProvinceId = matchedProvince.ProvinceId;
+        }
+
+        // Handle district parameter (name or ID)
+        if (!string.IsNullOrEmpty(district) && !districtId.HasValue)
+        {
+            if (!resolvedProvinceId.HasValue)
+            {
+                return BadRequest(new { message = "Province parameter required when using district name" });
+            }
+
+            var districts = await _context.Districts.Where(d => d.ProvinceId == resolvedProvinceId.Value).ToListAsync();
+            var normalizedDistrict = NormalizeName(district);
+            var matchedDistrict = districts.FirstOrDefault(d => NormalizeName(d.Name) == normalizedDistrict);
+
+            if (matchedDistrict == null)
+            {
+                return BadRequest(new { message = $"District '{district}' not found in the selected province. Please check spelling or use districtId parameter." });
+            }
+
+            resolvedDistrictId = matchedDistrict.DistrictId;
+        }
+
+        // Validate scope against API package restrictions
         if (apiPackage.ProvinceId.HasValue)
         {
-            if (!provinceId.HasValue || provinceId.Value != apiPackage.ProvinceId.Value)
+            if (!resolvedProvinceId.HasValue || resolvedProvinceId.Value != apiPackage.ProvinceId.Value)
             {
-                return BadRequest(new { message = $"API key restricted to province ID {apiPackage.ProvinceId}" });
+                var restrictedProvince = await _context.Provinces.FindAsync(apiPackage.ProvinceId.Value);
+                return BadRequest(new { message = $"API key restricted to province: {restrictedProvince?.Name ?? $"ID {apiPackage.ProvinceId}"}" });
             }
         }
 
         if (apiPackage.DistrictId.HasValue)
         {
-            if (!districtId.HasValue || districtId.Value != apiPackage.DistrictId.Value)
+            if (!resolvedDistrictId.HasValue || resolvedDistrictId.Value != apiPackage.DistrictId.Value)
             {
-                return BadRequest(new { message = $"API key restricted to district ID {apiPackage.DistrictId}" });
+                var restrictedDistrict = await _context.Districts.FindAsync(apiPackage.DistrictId.Value);
+                return BadRequest(new { message = $"API key restricted to district: {restrictedDistrict?.Name ?? $"ID {apiPackage.DistrictId}"}" });
             }
         }
 
-        // Query data
+        // Query data with resolved IDs
         var query = _context.DatasetRecords
             .Include(r => r.Dataset)
             .Include(r => r.Province)
             .Include(r => r.District)
             .Where(r => r.Dataset!.ModerationStatus == "Approved");
 
-        if (provinceId.HasValue)
+        if (resolvedProvinceId.HasValue)
         {
-            query = query.Where(r => r.ProvinceId == provinceId.Value);
+            query = query.Where(r => r.ProvinceId == resolvedProvinceId.Value);
         }
 
-        if (districtId.HasValue)
+        if (resolvedDistrictId.HasValue)
         {
-            query = query.Where(r => r.DistrictId == districtId.Value);
+            query = query.Where(r => r.DistrictId == resolvedDistrictId.Value);
         }
 
         if (startDate.HasValue)

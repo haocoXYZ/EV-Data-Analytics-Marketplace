@@ -99,18 +99,18 @@ export interface DataPackagePurchaseRequest {
 
 export interface DataPackagePurchase {
   purchaseId: number
-  consumerId: number
-  provinceId: number
+  consumerId?: number
+  provinceId?: number
   provinceName: string
   districtId?: number
   districtName?: string
-  startDate: string
-  endDate: string
+  startDate?: string  // Optional - may be null
+  endDate?: string    // Optional - may be null
   rowCount: number
-  pricePerRow: number
+  pricePerRow?: number
   totalPrice: number
   status: string
-  purchaseDate: string
+  purchaseDate?: string
   downloadCount: number
   maxDownload: number
   lastDownloadDate?: string
@@ -370,6 +370,7 @@ export interface ChartDataPoint {
   label: string
   value: number
   date?: string
+  stationCount?: number
 }
 
 // ============= LOCATION TYPES =============
@@ -378,13 +379,15 @@ export interface Province {
   provinceId: number
   name: string
   code: string
+  // Frontend-only fields for map visualization
+  coordinates?: { x: number; y: number }
 }
 
 export interface District {
   districtId: number
   provinceId: number
   name: string
-  code: string
+  code?: string
 }
 
 // ============= COMMON TYPES =============
