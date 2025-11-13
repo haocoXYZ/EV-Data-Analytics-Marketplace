@@ -419,6 +419,35 @@ GET    /api/payouts/provider/earnings   - Provider's earnings and revenue shares
 POST   /api/payouts/process             - Process monthly payout (Admin)
 ```
 
+## Troubleshooting
+
+**Backend won't start:**
+- Verify SQL Server is running and accessible
+- Check connection string in `appsettings.json` matches your SQL Server setup
+- Run `dotnet ef database update` manually if auto-migration fails
+- Check port 5258 is not already in use
+
+**Frontend can't connect to backend:**
+- Verify backend is running on http://localhost:5258
+- Check CORS settings in `appsettings.json` include your frontend URL
+- Verify `VITE_API_URL` environment variable (or default in `client.ts:4`)
+- Use browser DevTools Network tab to inspect failed requests
+
+**Database migration errors:**
+- Drop and recreate: `dotnet ef database drop --force && dotnet ef database update`
+- Verify EF Core tools installed: `dotnet tool install --global dotnet-ef`
+- Check migration files in `Migrations/` folder for conflicts
+
+**401 Unauthorized errors:**
+- JWT token may have expired (24 hour lifetime)
+- Log out and log back in to get fresh token
+- Check `Authorization: Bearer <token>` header is being sent
+- Verify JWT settings in `appsettings.json` match between token generation and validation
+
+**Health Check:**
+- Test API is running: `GET http://localhost:5258/health`
+- Should return: `{"status":"healthy","timestamp":"..."}`
+
 ## Configuration
 
 ### Backend Configuration

@@ -154,7 +154,24 @@ export default function SubscriptionPurchase() {
       }
     } catch (err: any) {
       console.error('Purchase error:', err)
-      setError(err.response?.data?.message || 'Failed to create subscription')
+      const errorData = err.response?.data
+
+      // Check if this is a downgrade attempt
+      if (errorData?.currentSubscription) {
+        const currentSub = errorData.currentSubscription
+        setError(
+          `⚠️ ${errorData.message}\n\n` +
+          `📦 Gói hiện tại: ${currentSub.billingCycle}\n` +
+          `📅 Hết hạn: ${new Date(currentSub.endDate).toLocaleDateString('vi-VN')}\n` +
+          `⏳ Còn lại: ${currentSub.daysRemaining} ngày\n\n` +
+          (errorData.upgradeAvailable
+            ? '💡 Hãy sử dụng nút "Nâng cấp" trong trang "Gói Đã Mua" để được ưu đãi!'
+            : '💡 Vui lòng đợi gói hiện tại hết hạn hoặc sử dụng chức năng Nâng cấp.')
+        )
+      } else {
+        setError(errorData?.message || 'Failed to create subscription')
+      }
+
       setPurchasing(false)
     }
   }

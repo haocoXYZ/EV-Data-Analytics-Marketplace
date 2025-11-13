@@ -60,6 +60,64 @@ public class SubscriptionPackageController : ControllerBase
             }
         }
 
+        // Check for existing active subscriptions in the same province/district
+        var existingActiveSubscription = await _context.SubscriptionPackagePurchases
+            .Where(s => s.ConsumerId == consumer.ConsumerId)
+            .Where(s => s.ProvinceId == dto.ProvinceId)
+            .Where(s => (!dto.DistrictId.HasValue && !s.DistrictId.HasValue) ||
+                       (dto.DistrictId.HasValue && s.DistrictId == dto.DistrictId.Value))
+            .Where(s => s.Status == "Active")
+            .Where(s => s.EndDate > DateTime.Now)
+            .OrderByDescending(s => s.EndDate)
+            .FirstOrDefaultAsync();
+
+        if (existingActiveSubscription != null)
+        {
+            // Define billing cycle hierarchy: Monthly < Quarterly < Yearly
+            var billingCycleOrder = new Dictionary<string, int>
+            {
+                { "Monthly", 1 },
+                { "Quarterly", 3 },
+                { "Yearly", 12 }
+            };
+
+            var currentCycleValue = billingCycleOrder.GetValueOrDefault(existingActiveSubscription.BillingCycle, 0);
+            var newCycleValue = billingCycleOrder.GetValueOrDefault(dto.BillingCycle, 0);
+
+            // Prevent downgrade
+            if (newCycleValue < currentCycleValue)
+            {
+                return BadRequest(new
+                {
+                    message = $"Không thể hạ cấp từ gói {existingActiveSubscription.BillingCycle} xuống {dto.BillingCycle}. Vui lòng sử dụng chức năng Nâng cấp hoặc đợi gói hiện tại hết hạn.",
+                    currentSubscription = new
+                    {
+                        subscriptionId = existingActiveSubscription.SubscriptionId,
+                        billingCycle = existingActiveSubscription.BillingCycle,
+                        endDate = existingActiveSubscription.EndDate,
+                        daysRemaining = (existingActiveSubscription.EndDate - DateTime.Now).Days
+                    }
+                });
+            }
+
+            // If same level or upgrade, suggest using upgrade feature instead
+            if (newCycleValue >= currentCycleValue)
+            {
+                return BadRequest(new
+                {
+                    message = $"Bạn đã có gói {existingActiveSubscription.BillingCycle} đang hoạt động. Vui lòng sử dụng chức năng 'Nâng cấp' để được hưởng ưu đãi từ gói hiện tại.",
+                    currentSubscription = new
+                    {
+                        subscriptionId = existingActiveSubscription.SubscriptionId,
+                        billingCycle = existingActiveSubscription.BillingCycle,
+                        endDate = existingActiveSubscription.EndDate,
+                        daysRemaining = (existingActiveSubscription.EndDate - DateTime.Now).Days
+                    },
+                    upgradeAvailable = newCycleValue > currentCycleValue
+                });
+            }
+        }
+
         // Get pricing
         var pricing = await _context.SystemPricings
             .FirstOrDefaultAsync(p => p.PackageType == "SubscriptionPackage" && p.IsActive);
@@ -293,10 +351,10 @@ public class SubscriptionPackageController : ControllerBase
     }
 
     /// <summary>
-    /// Get station distribution chart data
+    /// Get station distribution by district chart data
     /// </summary>
     [HttpGet("{subscriptionId}/charts/station-distribution")]
-    public async Task<IActionResult> GetStationDistributionChart(int subscriptionId, [FromQuery] int? days = null, [FromQuery] int top = 10)
+    public async Task<IActionResult> GetStationDistributionChart(int subscriptionId, [FromQuery] int? days = null)
     {
         var subscription = await ValidateSubscriptionAccess(subscriptionId);
         if (subscription == null)
@@ -306,6 +364,7 @@ public class SubscriptionPackageController : ControllerBase
 
         var query = _context.DatasetRecords
             .Include(r => r.Dataset)
+            .Include(r => r.District)
             .Where(r => r.ProvinceId == subscription.ProvinceId)
             .Where(r => r.Dataset!.ModerationStatus == "Approved")
             .Where(r => !subscription.DistrictId.HasValue || r.DistrictId == subscription.DistrictId.Value);
@@ -317,25 +376,28 @@ public class SubscriptionPackageController : ControllerBase
             query = query.Where(r => r.ChargingTimestamp >= startDate);
         }
 
-        var data = await query
-            .GroupBy(r => new { r.StationId, r.StationName })
+        // Load all records into memory first to access navigation properties
+        var allRecords = await query.ToListAsync();
+
+        var data = allRecords
+            .GroupBy(r => new { r.DistrictId, DistrictName = r.District?.Name ?? "Chưa phân loại" })
             .Select(g => new
             {
-                stationId = g.Key.StationId,
-                stationName = g.Key.StationName,
+                districtId = g.Key.DistrictId,
+                districtName = g.Key.DistrictName,
                 totalEnergy = g.Sum(r => r.EnergyKwh),
+                stationCount = g.Select(r => r.StationId).Distinct().Count(),
                 recordCount = g.Count()
             })
             .OrderByDescending(g => g.totalEnergy)
-            .Take(top)
-            .ToListAsync();
+            .ToList();
 
         return Ok(new
         {
-            chartType = $"Top {top} Stations by Energy",
+            chartType = "Station Distribution by District",
             dataPoints = data,
             daysFilter = days,
-            totalStations = data.Count
+            totalDistricts = data.Count
         });
     }
 

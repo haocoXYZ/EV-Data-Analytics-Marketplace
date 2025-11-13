@@ -370,6 +370,7 @@ export interface ChartDataPoint {
   label: string
   value: number
   date?: string
+  stationCount?: number
 }
 
 // ============= LOCATION TYPES =============

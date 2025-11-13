@@ -69,30 +69,36 @@ export const subscriptionsApi = {
 
   /**
    * GET /api/subscription-packages/{id}/charts/station-distribution
-   * Get station distribution chart data
+   * Get station distribution by district chart data
    * @param subscriptionId - The subscription ID
    * @param days - Optional number of days to filter (undefined = all data)
-   * @param top - Number of top stations to return (default 10)
    */
-  getStationDistribution: async (subscriptionId: number, days?: number, top: number = 10): Promise<ChartDataPoint[]> => {
-    const params: any = { top }
-    if (days) params.days = days
+  getStationDistribution: async (subscriptionId: number, days?: number): Promise<ChartDataPoint[]> => {
+    const params = days ? { days } : {}
 
     const response = await client.get<{
       chartType: string
       dataPoints: Array<{
-        stationId: string
-        stationName: string
+        districtId: number
+        districtName: string
         totalEnergy: number
+        stationCount: number
         recordCount: number
       }>
     }>(`/subscription-packages/${subscriptionId}/charts/station-distribution`, { params })
 
+    console.log('🏢 Backend Station Distribution Response:', response.data)
+
     // Transform backend response to {label, value} format
-    return response.data.dataPoints.map(point => ({
-      label: point.stationName || point.stationId,
-      value: Math.round(point.totalEnergy * 100) / 100
+    const transformed = response.data.dataPoints.map(point => ({
+      label: point.districtName || 'Không xác định',
+      value: Math.round(point.totalEnergy * 100) / 100,
+      stationCount: point.stationCount || 0
     }))
+
+    console.log('🏢 Transformed Station Distribution:', transformed)
+
+    return transformed
   },
 
   /**

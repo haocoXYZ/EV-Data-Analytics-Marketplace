@@ -296,7 +296,8 @@ export default function MyPurchases() {
                           <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">ID</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Province</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">Billing Cycle</th>
-                          <th className="text-right py-3 px-4 font-semibold text-gray-700 text-sm">Price</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-700 text-sm">Monthly Price</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-700 text-sm">Total Paid</th>
                           <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">Status</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700 text-sm">End Date</th>
                           <th className="text-center py-3 px-4 font-semibold text-gray-700 text-sm">Actions</th>
@@ -317,7 +318,8 @@ export default function MyPurchases() {
                                 )}
                               </div>
                             </td>
-                            <td className="py-3 px-4 text-right font-semibold text-gray-900">{(item.monthlyPrice || 0).toLocaleString()} đ</td>
+                            <td className="py-3 px-4 text-right text-gray-600">{(item.monthlyPrice || 0).toLocaleString()} đ/tháng</td>
+                            <td className="py-3 px-4 text-right font-semibold text-gray-900">{(item.totalPaid || 0).toLocaleString()} đ</td>
                             <td className="py-3 px-4 text-center">
                               <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusBadge(item.status)}`}>
                                 {item.status}
